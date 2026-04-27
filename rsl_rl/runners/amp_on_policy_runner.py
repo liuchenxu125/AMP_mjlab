@@ -179,7 +179,28 @@ class AmpOnPolicyRunner:
             device,
             train_cfg["amp_task_reward_lerp"],
         ).to(self.device)
-        min_std = torch.zeros(len(train_cfg["min_normalized_std"]), device=self.device, requires_grad=False)
+        min_std_values = list(train_cfg["min_normalized_std"])
+        num_actions = self.env.num_actions
+        if len(min_std_values) == 0:
+            min_std_values = [0.0] * num_actions
+            print(f"[AMPPPO] Empty min_normalized_std. Falling back to {num_actions} zeros.")
+        elif len(min_std_values) == 1:
+            min_std_values = min_std_values * num_actions
+        elif len(min_std_values) < num_actions:
+            pad_value = min_std_values[-1]
+            min_std_values = min_std_values + [pad_value] * (num_actions - len(min_std_values))
+            print(
+                f"[AMPPPO] min_normalized_std has {len(train_cfg['min_normalized_std'])} values, "
+                f"padded to {num_actions} with {pad_value}."
+            )
+        elif len(min_std_values) > num_actions:
+            min_std_values = min_std_values[:num_actions]
+            print(
+                f"[AMPPPO] min_normalized_std has {len(train_cfg['min_normalized_std'])} values, "
+                f"truncated to {num_actions}."
+            )
+
+        min_std = torch.tensor(min_std_values, device=self.device, requires_grad=False)
 
         # initialize algorithm
         alg_class = eval(self.alg_cfg.pop("class_name"))

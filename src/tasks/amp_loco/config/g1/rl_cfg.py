@@ -26,7 +26,7 @@ class RslRlAmpRunnerCfg(RslRlOnPolicyRunnerCfg):
   amp_num_preload_transitions: int = 200000
   amp_task_reward_lerp: float = 0.75
   amp_discr_hidden_dims: List[int] = field(default_factory=lambda: [1024, 512, 256])
-  min_normalized_std: List[float] = field(default_factory=lambda: [0.05] * 20)
+  min_normalized_std: List[float] = field(default_factory=lambda: [0.05] * 29)
   amp_body_names: tuple = ()
   amp_anchor_name: str = ""
 
@@ -75,7 +75,7 @@ def g1_amp_ppo_runner_cfg() -> RslRlAmpRunnerCfg:
     amp_num_preload_transitions=200000,
     amp_task_reward_lerp=0.75,
     amp_discr_hidden_dims=[1024, 512, 256],
-    min_normalized_std=[0.05] * 20,
+    min_normalized_std=[0.05] * 29,
     amp_body_names=(
       "pelvis",
       "left_hip_roll_link",

@@ -75,7 +75,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "joint_vel": ObservationTermCfg(
       func=mdp.joint_vel_rel,
-      noise=Unoise(n_min=-1.5, n_max=1.5),
+      noise=Unoise(n_min=-0.5, n_max=0.5),
     ),
     "actions": ObservationTermCfg(func=mdp.last_action),
   }
@@ -164,6 +164,9 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     "mean_action_acc": MetricsTermCfg(
       func=mdp.mean_action_acc,
     ),
+    "mean_delay_steps": MetricsTermCfg(
+      func=mdp.mean_delay_steps,
+    ),
   }
 
   ##
@@ -193,7 +196,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       heading_control_stiffness=0.5,
       debug_vis=True,
       ranges=UniformVelocityCommandCfg.Ranges(
-        lin_vel_x=(-1.5, 2.5),
+        lin_vel_x=(-1.5, 3.0),
         lin_vel_y=(-1.0, 1.0),
         ang_vel_z=(-3.14 / 2, 3.14 / 2),
         heading=(-math.pi / 2, math.pi / 2),
@@ -280,15 +283,34 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     "track_anchor_linear_velocity": RewardTermCfg(
       func=mdp.track_anchor_linear_velocity,
       weight=1.0,
-      params={"command_name": "twist", "std": 1.0,
-              "anchor_cfg": SceneEntityCfg("robot", body_names=()),},
-      
+        params={"command_name": "twist", 
+                "std": 1.0,
+                "mask_delay": True,
+                "delay_env_rew_ratio": 0.0,
+                "anchor_cfg": SceneEntityCfg("robot", body_names=()),},
     ),
     "track_anchor_angular_velocity": RewardTermCfg(
       func=mdp.track_anchor_angular_velocity,
       weight=1.0,
-      params={"command_name": "twist", "std": 3.14,
-              "anchor_cfg": SceneEntityCfg("robot", body_names=()),},
+        params={"command_name": "twist", "std": 3.14,
+                "mask_delay": True,
+                "delay_env_rew_ratio": 0.0,
+                "anchor_cfg": SceneEntityCfg("robot", body_names=()),},
+    ),
+    "track_root_height": RewardTermCfg(
+      func=mdp.track_root_height,
+      weight=1.0,
+        params={"std": 0.3,
+                "mask_delay": True,
+                "delay_env_rew_ratio": 3.5},
+    ),
+    "body_ang_vel_xy_l2": RewardTermCfg(
+      func=mdp.body_ang_vel_xy_l2,
+      weight=0.5,
+        params={"std": 3.14,
+                "mask_delay": True,
+                "delay_env_rew_ratio": 0.0,
+                "body_cfg": SceneEntityCfg("robot", body_names=("pelvis",)),},
     ),
     
     "is_terminated": RewardTermCfg(func=mdp.is_terminated, weight=-200.0),
@@ -334,7 +356,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "bad_base_height": TerminationTermCfg(
       func=mdp.root_height_below_minimum,
-      params={"minimum_height": 0.35,},
+      params={"minimum_height": 0.5,},
     ),
   }
 

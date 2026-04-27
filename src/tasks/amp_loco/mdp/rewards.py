@@ -8,7 +8,11 @@ from mjlab.entity import Entity
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import BuiltinSensor, ContactSensor
-from mjlab.utils.lab_api.math import quat_apply_inverse
+from mjlab.utils.lab_api.math import (
+  quat_apply_inverse, 
+  yaw_quat, 
+  quat_apply
+)
 from mjlab.utils.lab_api.string import (
   resolve_matching_names_values,
 )
@@ -19,10 +23,57 @@ if TYPE_CHECKING:
 
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
 
+
+def _get_delay_env_mask(env: ManagerBasedRlEnv) -> torch.Tensor | None:
+  """Get delaying env mask from DelayedTerminationManager if installed."""
+  tm = env.termination_manager
+  delay_env_mask = getattr(tm, "_delay_env_mask", None)
+  delay_counters = getattr(tm, "_delay_counters", None)
+  if isinstance(delay_env_mask, torch.Tensor) and isinstance(delay_counters, torch.Tensor):
+    return delay_env_mask & (delay_counters > 0)
+  return None
+
+
+def _apply_delay_env_reward_scaling(
+  env: ManagerBasedRlEnv,
+  reward: torch.Tensor,
+  mask_delay: bool,
+  delay_env_rew_ratio: float,
+) -> torch.Tensor:
+  if not mask_delay:
+    return reward
+
+  delay_env_mask = _get_delay_env_mask(env)
+  if delay_env_mask is None:
+    return reward
+
+  scaled_reward = reward * delay_env_rew_ratio
+  return torch.where(delay_env_mask, scaled_reward, reward)
+
+
+def _apply_delay_env_reward_mask_only(
+  env: ManagerBasedRlEnv,
+  reward: torch.Tensor,
+  mask_delay: bool,
+  delay_env_rew_ratio: float,
+) -> torch.Tensor:
+  if not mask_delay:
+    return torch.zeros_like(reward)
+
+  delay_env_mask = _get_delay_env_mask(env)
+  if delay_env_mask is None:
+    return torch.zeros_like(reward)
+
+  scaled_reward = reward * delay_env_rew_ratio
+  masked_reward = torch.where(delay_env_mask, scaled_reward, torch.zeros_like(reward))
+  return masked_reward
+
 def track_anchor_linear_velocity(
   env: ManagerBasedRlEnv,
   std: float,
   command_name: str,
+  mask_delay: bool = False,
+  delay_env_rew_ratio: float = 1.0,
   asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
   anchor_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=()),
 ) -> torch.Tensor:
@@ -34,19 +85,22 @@ def track_anchor_linear_velocity(
   command = env.command_manager.get_command(command_name)
   assert command is not None, f"Command '{command_name}' not found."
 
-  anchor_lin_vel_w = asset.data.body_link_lin_vel_w[:, anchor_cfg.body_ids[0]]
-  anchor_lin_vel_b = quat_apply_inverse(
-    asset.data.body_link_quat_w[:, anchor_cfg.body_ids[0]],
-    anchor_lin_vel_w,
+  command_xyz_b = torch.cat((command[:, :2], torch.zeros_like(command[:, :1])), dim=-1)
+  command_xyz_w = quat_apply(
+    yaw_quat(asset.data.body_link_quat_w[:, anchor_cfg.body_ids[0]]),
+    command_xyz_b,
   )
-  anchor_lin_velxy_b = anchor_lin_vel_b[:, :2]
-  xy_error = torch.sum(torch.square(command[:, :2] - anchor_lin_velxy_b[:, :2]), dim=1)
-  return torch.exp(-xy_error / std**2)
+  lin_vel_error = torch.sum(torch.square(command_xyz_w[:,:3] - asset.data.body_link_lin_vel_w[:, anchor_cfg.body_ids[0], :3]), dim=1)
+  reward = torch.exp(-lin_vel_error / std**2)
+  return _apply_delay_env_reward_scaling(env, reward, mask_delay, delay_env_rew_ratio)
+
 
 def track_anchor_angular_velocity(
   env: ManagerBasedRlEnv,
   std: float,
   command_name: str,
+  mask_delay: bool = False,
+  delay_env_rew_ratio: float = 1.0,
   asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
   anchor_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=()),
 ) -> torch.Tensor:
@@ -59,14 +113,59 @@ def track_anchor_angular_velocity(
   assert command is not None, f"Command '{command_name}' not found."
 
   anchor_ang_vel_w = asset.data.body_link_ang_vel_w[:, anchor_cfg.body_ids[0]]
-  anchor_ang_vel_b = quat_apply_inverse(
+  anchor_ang_z_vel_w = anchor_ang_vel_w[:, 2]
+  command_ang_vel_w = command[:, 2]
+  ang_vel_z_error = torch.square(command_ang_vel_w - anchor_ang_z_vel_w)
+
+  anchor_ang_vel_b =  quat_apply_inverse(
     asset.data.body_link_quat_w[:, anchor_cfg.body_ids[0]],
     anchor_ang_vel_w,
   )
-  anchor_ang_vel_z_b = anchor_ang_vel_b[:, 2]
-  ang_vel_error = torch.square(command[:, 2] - anchor_ang_vel_z_b)
+  ang_vel_xy_error = torch.sum(torch.square(anchor_ang_vel_b[:, :2]), dim=-1)
 
-  return torch.exp(-ang_vel_error / std**2)
+  total_error = ang_vel_z_error + ang_vel_xy_error
+
+  reward = torch.exp(-total_error / std**2)
+  return _apply_delay_env_reward_scaling(env, reward, mask_delay, delay_env_rew_ratio)
+
+def body_ang_vel_xy_l2(
+  env: ManagerBasedRlEnv,
+  std: float,
+  mask_delay: bool = False,
+  delay_env_rew_ratio: float = 1.0,
+  body_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=()),
+) -> torch.Tensor:
+  """Reward heading error for heading-controlled envs, angular velocity for others.
+
+  The commanded xy angular velocities are assumed to be zero.
+  """
+  asset: Entity = env.scene[body_cfg.name]
+  body_ang_vel_w = asset.data.body_link_ang_vel_w[:, body_cfg.body_ids[0]]
+  body_ang_vel_b = quat_apply_inverse(
+    asset.data.body_link_quat_w[:, body_cfg.body_ids[0]],
+    body_ang_vel_w,
+  )
+  body_ang_vel_xy_b = body_ang_vel_b[:, :2]
+  ang_vel_xy_error = torch.sum(torch.square(body_ang_vel_xy_b), dim=-1)
+
+  reward = torch.exp(-ang_vel_xy_error / std**2)
+  return _apply_delay_env_reward_scaling(env, reward, mask_delay, delay_env_rew_ratio)
+
+def track_root_height(
+  env: ManagerBasedRlEnv,
+  std: float,
+  mask_delay: bool = False,
+  delay_env_rew_ratio: float = 1.0,
+  asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+  """Reward for tracking the commanded anchor height."""
+  asset: Entity = env.scene[asset_cfg.name]
+
+  desired_height = asset.data.default_root_state[:, 2]
+  cur_root_height = asset.data.body_link_pos_w[:, 0, 2]
+  height_error = torch.square(desired_height - cur_root_height)
+  reward = torch.exp(-height_error / std**2)
+  return _apply_delay_env_reward_mask_only(env, reward, mask_delay, delay_env_rew_ratio)
 
 def feet_slip(
   env: ManagerBasedRlEnv,

@@ -7,3 +7,4 @@ from .rewards import *  # noqa: F403
 from .terminations import *  # noqa: F403
 from .command import *  # noqa: F403
 from .terrain import *  # noqa: F403
+from .metrics import *  # noqa: F403

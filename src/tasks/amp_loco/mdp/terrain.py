@@ -7,9 +7,9 @@ RANDOM_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
   num_rows=10,
   num_cols=20,
   sub_terrains={
-    "flat": terrain_gen.BoxFlatTerrainCfg(proportion=0.2),
+    "flat": terrain_gen.BoxFlatTerrainCfg(proportion=0.4),
     "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
-      proportion=0.1,
+      proportion=0.6,
       noise_range=(0.02, 0.05),
       noise_step=0.02,
       border_width=0.25,

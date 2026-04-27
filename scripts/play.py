@@ -4,6 +4,7 @@ import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 from typing import Literal
 
 import torch
@@ -33,6 +34,8 @@ class PlayConfig:
   camera: int | str | None = None
   viewer: Literal["auto", "native", "viser"] = "auto"
   no_terminations: bool = False
+  export_onnx: bool = True
+  """Export loaded trained policy to ONNX under current run directory/export."""
   """Disable all termination conditions (useful for viewing motions with dummy agents)."""
 
   # Internal flag used by demo script.
@@ -40,6 +43,62 @@ class PlayConfig:
 
 
 def run_play(task_id: str, cfg: PlayConfig):
+  class _OnnxPolicyWrapper(torch.nn.Module):
+    """Expose act_inference as forward and optionally include obs normalizer."""
+
+    def __init__(self, actor_critic: torch.nn.Module, obs_normalizer: Any = None):
+      super().__init__()
+      self.actor_critic = actor_critic
+      self.obs_normalizer = obs_normalizer
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+      if self.obs_normalizer is not None:
+        obs = self.obs_normalizer(obs)
+      return self.actor_critic.act_inference(obs)
+
+  def export_runner_policy_to_onnx(runner: Any, output_path: Path):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Prefer runner-provided exporters to keep behavior consistent with training.
+    if hasattr(runner, "export_policy_to_onnx"):
+      runner.export_policy_to_onnx(str(output_path.parent), output_path.name)
+      return
+    if hasattr(runner, "_export_policy_to_onnx"):
+      runner._export_policy_to_onnx(str(output_path.parent), output_path.name)
+      return
+
+    # Fallback exporter for runners without explicit ONNX export helper.
+    policy = runner.alg.policy
+    obs_normalizer = None
+    if getattr(runner, "empirical_normalization", False) and hasattr(
+      runner, "obs_normalizer"
+    ):
+      obs_normalizer = runner.obs_normalizer
+      obs_normalizer.to("cpu")
+      obs_normalizer.eval()
+
+    wrapper = _OnnxPolicyWrapper(policy, obs_normalizer)
+    wrapper.to("cpu")
+    wrapper.eval()
+    num_obs = policy.actor[0].in_features
+    dummy_input = torch.zeros(1, num_obs)
+    torch.onnx.export(
+      wrapper,
+      dummy_input,
+      str(output_path),
+      export_params=True,
+      opset_version=18,
+      input_names=["obs"],
+      output_names=["actions"],
+      dynamic_axes={"obs": {0: "batch"}, "actions": {0: "batch"}},
+    )
+
+    runner_device = getattr(runner, "device", None)
+    if runner_device is not None:
+      policy.to(runner_device)
+      if obs_normalizer is not None:
+        obs_normalizer.to(runner_device)
+
   configure_torch_backends()
 
   device = cfg.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -156,6 +215,19 @@ def run_play(task_id: str, cfg: PlayConfig):
     runner = runner_cls(env, asdict(agent_cfg), device=device)
     runner.load(str(resume_path), load_optimizer=False)
     policy = runner.get_inference_policy(device=device)
+
+    if cfg.export_onnx:
+      safe_task_name = task_id.replace("/", "_").replace(":", "_")
+      checkpoint_stem = resume_path.stem if resume_path is not None else "policy"
+      export_root = log_dir if log_dir is not None else Path("logs")
+      onnx_path = (export_root / "export" / f"{safe_task_name}_{checkpoint_stem}.onnx").resolve()
+      try:
+        export_runner_policy_to_onnx(runner, onnx_path)
+        print(f"[INFO]: Exported ONNX policy to: {onnx_path}")
+      except Exception as exc:
+        print(f"[WARN]: Failed to export ONNX policy: {exc}")
+  if DUMMY_MODE and cfg.export_onnx:
+    print("[WARN]: ONNX export is only available for trained agents.")
 
   # Handle "auto" viewer selection.
   if cfg.viewer == "auto":

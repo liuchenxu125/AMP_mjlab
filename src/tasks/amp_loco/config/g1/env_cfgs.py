@@ -20,8 +20,9 @@ def g1_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   """Create Unitree G1 rough terrain velocity configuration."""
   cfg = make_amp_env_cfg()
 
-  cfg.sim.mujoco.ccd_iterations = 1000
-  cfg.sim.contact_sensor_maxmatch = 500
+  # Keep CCD high enough for stability but avoid Warp OOM from excessive EPA buffers.
+  cfg.sim.mujoco.ccd_iterations = 128
+  cfg.sim.contact_sensor_maxmatch = 128
   cfg.sim.nconmax = 48
 
   cfg.scene.entities = {"robot": get_g1_robot_cfg()}
@@ -50,6 +51,7 @@ def g1_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "right_elbow_link",
                 "right_wrist_yaw_link",)
   anchor_name = "torso_link"
+  root_name = "pelvis"
 
   feet_ground_cfg = ContactSensorCfg(
     name="feet_ground_contact",
@@ -96,7 +98,8 @@ def g1_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.events["foot_friction"].params["asset_cfg"].geom_names = geom_names
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso_link",)
 
-  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.
+  # Configure motion reset to sample from the entire motion with a delay.
+  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
 
   # Set motion data path for startup loader and reset.
@@ -118,6 +121,8 @@ def g1_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     weight=-0.1,
     params={"sensor_name": self_collision_cfg.name, "force_threshold": 10.0},
   )
+  cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
+
   cfg.observations["critic"].terms["body_pos_b"].params["anchor_cfg"].body_names = (anchor_name,)
   cfg.observations["critic"].terms["body_pos_b"].params["body_cfg"].body_names = body_names
  
@@ -152,15 +157,16 @@ def g1_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       params={},
     )
 
-    cfg.terminations["bad_orientation"].params["limit_angle"] = 3.14 
-    cfg.terminations["bad_base_height"].params["minimum_height"] = 0.2
+    # cfg.terminations["bad_orientation"].params["limit_angle"] = 6.14
+    # cfg.terminations["bad_base_height"].params["minimum_height"] = 0.
+    cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 1.0
 
-    if cfg.scene.terrain is not None:
-      if cfg.scene.terrain.terrain_generator is not None:
-        cfg.scene.terrain.terrain_generator.curriculum = False
-        cfg.scene.terrain.terrain_generator.num_cols = 5
-        cfg.scene.terrain.terrain_generator.num_rows = 5
-        cfg.scene.terrain.terrain_generator.border_width = 10.0
+    # if cfg.scene.terrain is not None:
+    #   if cfg.scene.terrain.terrain_generator is not None:
+    #     cfg.scene.terrain.terrain_generator.curriculum = False
+    #     cfg.scene.terrain.terrain_generator.num_cols = 5
+    #     cfg.scene.terrain.terrain_generator.num_rows = 5
+    #     cfg.scene.terrain.terrain_generator.border_width = 10.0
 
   return cfg
 
@@ -169,9 +175,9 @@ def g1_amp_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   """Create Unitree G1 flat terrain velocity configuration."""
   cfg = g1_amp_rough_env_cfg(play=play)
 
-  cfg.sim.njmax = 300
+  cfg.sim.njmax = 640
   cfg.sim.mujoco.ccd_iterations = 50
-  cfg.sim.contact_sensor_maxmatch = 64
+  cfg.sim.contact_sensor_maxmatch = 256
   cfg.sim.nconmax = None
 
   # Switch to flat terrain.
@@ -192,7 +198,7 @@ def g1_amp_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   if play:
     twist_cmd = cfg.commands["twist"]
     assert isinstance(twist_cmd, UniformVelocityCommandCfg)
-    twist_cmd.ranges.lin_vel_x = (-1.5, 2.5)
+    twist_cmd.ranges.lin_vel_x = (-1.5, 3.0)
     twist_cmd.ranges.lin_vel_y = (-1.0, 1.0)
     twist_cmd.ranges.ang_vel_z = (-3.14 / 2, 3.14 / 2)
 

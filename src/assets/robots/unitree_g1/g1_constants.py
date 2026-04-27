@@ -5,7 +5,8 @@ from pathlib import Path
 import mujoco
 
 from src import SRC_PATH
-from mjlab.actuator import BuiltinPositionActuatorCfg
+# from mjlab.actuator import BuiltinPositionActuatorCfg
+from src.assets.robots.unitree_g1.unitree_actuators import *
 from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
 from mjlab.utils.actuator import (
   ElectricActuator,
@@ -140,7 +141,7 @@ DAMPING_7520_22 = 2.0 * DAMPING_RATIO * ARMATURE_7520_22 * NATURAL_FREQ
 DAMPING_4010 = 2.0 * DAMPING_RATIO * ARMATURE_4010 * NATURAL_FREQ
 DAMPING_5010_16 = 2.0 * DAMPING_RATIO * ARMATURE_5010_16 * NATURAL_FREQ
 
-G1_ACTUATOR_5020 = BuiltinPositionActuatorCfg(
+G1_ACTUATOR_5020 = UnitreeActuatorCfg_N5020_16(
   target_names_expr=(
     ".*_elbow_joint",
     ".*_shoulder_pitch_joint",
@@ -153,14 +154,14 @@ G1_ACTUATOR_5020 = BuiltinPositionActuatorCfg(
   effort_limit=ACTUATOR_5020.effort_limit,
   armature=ACTUATOR_5020.reflected_inertia,
 )
-G1_ACTUATOR_7520_14 = BuiltinPositionActuatorCfg(
+G1_ACTUATOR_7520_14 = UnitreeActuatorCfg_N7520_14p3(
   target_names_expr=(".*_hip_yaw_joint", "waist_yaw_joint"),
   stiffness=STIFFNESS_7520_14,
   damping=DAMPING_7520_14,
   effort_limit=ACTUATOR_7520_14.effort_limit,
   armature=ACTUATOR_7520_14.reflected_inertia,
 )
-G1_ACTUATOR_7520_22 = BuiltinPositionActuatorCfg(
+G1_ACTUATOR_7520_22 = UnitreeActuatorCfg_N7520_22p5(
   target_names_expr=(".*_hip_pitch_joint", ".*_hip_roll_joint", ".*_knee_joint"),
   stiffness=STIFFNESS_7520_22,
   damping=DAMPING_7520_22,
@@ -174,7 +175,7 @@ G1_ACTUATOR_7520_22 = BuiltinPositionActuatorCfg(
 #   effort_limit=ACTUATOR_4010.effort_limit,
 #   armature=ACTUATOR_4010.reflected_inertia,
 # )
-G1_ACTUATOR_5010_16 = BuiltinPositionActuatorCfg(
+G1_ACTUATOR_5010_16 = UnitreeActuatorCfg_N5010_16(
   target_names_expr=(".*_wrist_pitch_joint", ".*_wrist_yaw_joint"),
   stiffness=STIFFNESS_5010_16,
   damping=DAMPING_5010_16,
@@ -187,14 +188,14 @@ G1_ACTUATOR_5010_16 = BuiltinPositionActuatorCfg(
 # is configuration dependent. Since the exact geometry of the linkage is unknown, we
 # assume a nominal 1:1 gear ratio. Under this assumption, the joint armature in the
 # nominal configuration is approximated as the sum of the 2 actuators' armatures.
-G1_ACTUATOR_WAIST = BuiltinPositionActuatorCfg(
+G1_ACTUATOR_WAIST = UnitreeActuatorCfg_N5020_16(
   target_names_expr=("waist_pitch_joint", "waist_roll_joint"),
   stiffness=STIFFNESS_5020 * 2,
   damping=DAMPING_5020 * 2,
   effort_limit=ACTUATOR_5020.effort_limit * 2,
   armature=ACTUATOR_5020.reflected_inertia * 2,
 )
-G1_ACTUATOR_ANKLE = BuiltinPositionActuatorCfg(
+G1_ACTUATOR_ANKLE = UnitreeActuatorCfg_N5020_16(
   target_names_expr=(".*_ankle_pitch_joint", ".*_ankle_roll_joint"),
   stiffness=STIFFNESS_5020 * 2,
   damping=DAMPING_5020 * 2,

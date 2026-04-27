@@ -213,7 +213,10 @@ def init_motion_loader(
             delay_env_mask=delay_mask,
             max_delay_steps=max_delay_steps,
         )
-        print(f"[init_motion_loader] DelayedTerminationManager installed: {num_delay}/{env.num_envs} envs, max_delay_steps={max_delay_steps}")
+        print(
+            "[init_motion_loader] DelayedTerminationManager installed: "
+            f"{num_delay}/{env.num_envs} envs, max_delay_steps={max_delay_steps}"
+        )
 
 
 def reset_from_motion_data(

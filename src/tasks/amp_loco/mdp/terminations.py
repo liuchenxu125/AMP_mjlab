@@ -43,7 +43,7 @@ class DelayedTerminationManager(TerminationManager):
 
         # Delay envs whose counter hasn't reached threshold: suppress reset.
         not_ready = delay_and_done & (self._delay_counters < self._max_delay_steps)
-        self._truncated_buf[not_ready] = False
+        # self._truncated_buf[not_ready] = False
         self._terminated_buf[not_ready] = False
 
         # Delay envs whose counter reached threshold: allow reset, clear counter.

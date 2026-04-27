@@ -1,8 +1,9 @@
 # python scripts/csv_to_npz.py \
-#   --input-file src/assets/motions/g1/dance1_subject2.csv \
-#   --output-name dance1_subject2.npz \
+#   --input-file motion_data_csv/lafan1/fallAndGetUp1_subject1.csv \
+#   --output-name fallAndGetUp1_subject1.npz \
 #   --input-fps 30 \
 #   --output-fps 50 \
+#   --line-range "(408,1953)" \
 #   --render True \
 #   --render-backend window \
 #   --window-realtime True \
@@ -18,8 +19,8 @@
 #   --video-output src/assets/motions/g1/dance1_subject2.mp4
 
 # python scripts/csv_to_npz.py \
-#   --input_dir /home/crp/wbc_mjlab/motion_data_csv/amp \
-#   --output_dir /home/crp/wbc_mjlab/motion_data_npz/amp \
+#   --input-dir /home/crp/wbc_mjlab/motion_data_csv/amp \
+#   --output-dir /home/crp/wbc_mjlab/motion_data_npz/amp \
 #   --input-fps 120 \
 #   --output-fps 50 \
 #   --render True \
@@ -397,7 +398,7 @@ def main(
   input_file: str | None = None,
   output_name: str | None = None,
   input_dir: str | None = None,
-  output_dir: str = "./src/assets/motions/g1",
+  output_dir: str = "./motion_data_npz/amp/Recovery",
   input_fps: float = 30.0,
   output_fps: float = 50.0,
   device: str = "cuda:0",
