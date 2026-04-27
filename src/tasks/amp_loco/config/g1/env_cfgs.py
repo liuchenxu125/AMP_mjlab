@@ -157,8 +157,6 @@ def g1_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       params={},
     )
 
-    # cfg.terminations["bad_orientation"].params["limit_angle"] = 6.14
-    # cfg.terminations["bad_base_height"].params["minimum_height"] = 0.
     cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 1.0
 
     # if cfg.scene.terrain is not None:

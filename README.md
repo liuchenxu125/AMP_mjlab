@@ -1,52 +1,122 @@
 # wbc_mjlab
 
-本仓库用于 AMP 与速度任务相关的训练、脚本和资源管理。
+G1 AMP motion control project built on top of mjlab + rsl_rl.
 
-## 当前上传范围
+Key features of this repository:
 
-- rsl_rl
-- scripts
-- src
-- setup.py
+- A single policy learns both locomotion (walk/run) and recovery (fall-and-get-up)
+- AMP discriminator regularizes motion style and priors
+- Training and deployment pipelines are consistent, with direct ONNX policy export support
 
-## mjlab 本地改动说明
+## Core Idea
 
-你提到的符号 #sym:history_ordering 已在本机 mjlab 环境中生效。当前定位到的改动文件如下：
+Instead of training separate policies for locomotion and recovery and switching between them, this project learns both capabilities in one unified policy.
 
-- /home/crp/miniconda3/envs/mjlab/lib/python3.11/site-packages/mjlab/managers/observation_manager.py
+Implementation highlights:
 
-为便于迁移和复现，仓库中新增了补丁目录并保存该文件副本：
+- Motion data split:
+  - Walk/Run data: `src/assets/motions/g1/amp/WalkandRun`
+  - Recovery data: `src/assets/motions/g1/amp/Recovery`
+- Delayed termination/reset:
+  - A subset of environments does not reset immediately after termination
+  - These environments receive a recovery window and reset states sampled from recovery clips
+- Unified AMP training:
+  - One actor-critic + AMP discriminator
+  - Velocity tracking, perturbation robustness, and recovery are learned together
 
-- mjlab_patch/mjlab/managers/observation_manager.py
+This reduces discontinuities caused by policy switching and yields more consistent behavior.
 
-主要改动点：
+## Requirements
 
-1. 在 ObservationGroupCfg 中增加了 history_ordering 配置项，可选 term 或 time。
-2. 在观察项准备阶段，当 history_ordering=time 时，关闭每个 term 的历史维度扁平化，用于按时间步交错拼接。
-3. 在拼接输出阶段，当结果是三维张量且 history_ordering=time 时，将结果 reshape 为二维输出。
+- Linux
+- Python 3.11 (recommended)
+- Working MuJoCo and GPU driver setup
 
-对应代码位置（本机环境）：
+## Quick Start
 
-- ObservationGroupCfg.history_ordering 定义：第 95 行附近
-- 拼接后 time 布局处理：第 394 行附近
-- term 配置阶段的 time 布局处理：第 452 行附近
+### 1. Install
 
-说明：
+```bash
+conda activate mjlab
+cd wbc_mjlab
+python -m pip install -e .
+```
 
-- 以上 mjlab 改动位于 conda 环境 site-packages，不在本仓库版本管理内。
-- 现在可直接使用仓库中的补丁副本重新覆盖目标环境文件。
+### 2. Apply mjlab Patch (Required)
 
-示例（按当前 conda 环境路径）：
+This repo depends on a local patch to mjlab observation manager (`history_ordering` support).
+
+Patch file:
+
+- `mjlab_patch/mjlab/managers/observation_manager.py`
+
+Example command:
 
 ```bash
 cp mjlab_patch/mjlab/managers/observation_manager.py \
-	/home/crp/miniconda3/envs/mjlab/lib/python3.11/site-packages/mjlab/managers/observation_manager.py
+  /home/crp/miniconda3/envs/mjlab/lib/python3.11/site-packages/mjlab/managers/observation_manager.py
 ```
 
-## 本仓库中对该配置的使用
+### 3. List Available Tasks
 
-AMP 环境配置中，actor 与 critic 观测组已显式使用 history_ordering=time：
+```bash
+python scripts/list_envs.py --keyword AMP
+```
 
-- src/tasks/amp_loco/amp_env_cfg.py
+Main tasks:
 
-建议在复现实验时优先确认 mjlab 环境中的 observation_manager.py 与这里描述一致。
+- `Unitree-G1-AMP-Rough`
+- `Unitree-G1-AMP-Flat`
+
+## Training
+
+```bash
+python scripts/train.py Unitree-G1-AMP-Flat
+```
+
+Logs are saved by default to:
+
+- `logs/rsl_rl/g1_amp_locomotion/<time_stamp_run>/`
+
+## Evaluation and Visualization
+
+Replay with a trained checkpoint:
+
+```bash
+python scripts/play.py Unitree-G1-AMP-Rough \
+  --checkpoint-file logs/rsl_rl/g1_amp_locomotion/<run_dir>/model_<iter>.pt
+```
+
+Note: ONNX export is enabled by default in both training and play workflows.
+
+## Motion Data Preparation
+
+CSV-to-NPZ conversion script:
+
+```bash
+python scripts/csv_to_npz.py --help
+```
+
+Recommended data layout:
+
+- Raw CSV: `motion_data_csv/amp`
+- Converted NPZ: `src/assets/motions/g1/amp/WalkandRun` and `src/assets/motions/g1/amp/Recovery`
+
+If valid NPZ files exist in these folders, training config loads them automatically.
+
+## Repository Structure
+
+- `src/tasks/amp_loco`: AMP locomotion/recovery task implementation
+- `src/tasks/amp_loco/config/g1`: G1 task registration, env configs, RL configs
+- `src/tasks/amp_loco/mdp`: rewards, observations, events, termination logic
+- `scripts/train.py`: training entry point
+- `scripts/play.py`: playback entry point
+- `scripts/csv_to_npz.py`: motion data conversion tool
+- `mjlab_patch`: required local patch for mjlab
+
+## Highlights
+
+- One policy unifies walk/run and recovery skills
+- AMP + velocity objective jointly optimize style and task performance
+- Delayed reset with recovery sampling explicitly improves recovery ability
+- End-to-end pipeline supports ONNX export for deployment
