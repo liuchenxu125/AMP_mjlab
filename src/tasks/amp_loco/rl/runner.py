@@ -1,4 +1,5 @@
 import os
+import inspect
 
 import torch
 import wandb
@@ -27,6 +28,38 @@ class _OnnxPolicyWrapper(torch.nn.Module):
     if self.obs_normalizer is not None:
       obs = self.obs_normalizer(obs)
     return self.actor_critic.act_inference(obs)
+
+
+def _onnx_export_kwargs_single_file() -> dict:
+  """Build kwargs that request single-file ONNX export across torch versions."""
+  try:
+    params = inspect.signature(torch.onnx.export).parameters
+  except (TypeError, ValueError):
+    return {}
+
+  if "external_data" in params:
+    return {"external_data": False}
+  if "use_external_data_format" in params:
+    return {"use_external_data_format": False}
+  return {}
+
+
+def _inline_external_onnx_data(onnx_path: str) -> None:
+  """Merge external tensor data back into a single ONNX file if needed."""
+  data_path = f"{onnx_path}.data"
+  if not os.path.exists(data_path):
+    return
+
+  try:
+    import onnx
+
+    model = onnx.load(onnx_path, load_external_data=True)
+    onnx.save_model(model, onnx_path, save_as_external_data=False)
+    if os.path.exists(data_path):
+      os.remove(data_path)
+    print(f"[INFO]: Inlined external ONNX data into single file: {onnx_path}")
+  except Exception as exc:
+    print(f"[WARN]: Failed to inline ONNX external data for {onnx_path}: {exc}")
 
 
 class AMPOnPolicyRunner(AmpOnPolicyRunner):
@@ -60,7 +93,9 @@ class AMPOnPolicyRunner(AmpOnPolicyRunner):
       input_names=["obs"],
       output_names=["actions"],
       dynamic_axes={"obs": {0: "batch"}, "actions": {0: "batch"}},
+      **_onnx_export_kwargs_single_file(),
     )
+    _inline_external_onnx_data(os.path.join(path, filename))
     # move policy back to training device
     policy.to(self.device)
     if obs_normalizer is not None:
@@ -77,5 +112,6 @@ class AMPOnPolicyRunner(AmpOnPolicyRunner):
     onnx_path = os.path.join(policy_path, filename)
     metadata = get_base_metadata(self.env.unwrapped, run_name)
     attach_metadata_to_onnx(onnx_path, metadata)
+    _inline_external_onnx_data(onnx_path)
     if self.logger_type in ["wandb"]:
       wandb.save(policy_path + filename, base_path=os.path.dirname(policy_path))

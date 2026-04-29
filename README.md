@@ -1,4 +1,6 @@
-# wbc_mjlab
+# AMP_mjlab
+
+[中文 README](README_zh.md)
 
 G1 AMP motion control project built on top of mjlab + rsl_rl.
 

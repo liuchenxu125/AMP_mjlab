@@ -1,6 +1,7 @@
 """Script to play RL agent with RSL-RL."""
 
 import os
+import inspect
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -43,6 +44,36 @@ class PlayConfig:
 
 
 def run_play(task_id: str, cfg: PlayConfig):
+  def onnx_export_kwargs_single_file() -> dict:
+    """Build kwargs that request single-file ONNX export across torch versions."""
+    try:
+      params = inspect.signature(torch.onnx.export).parameters
+    except (TypeError, ValueError):
+      return {}
+
+    if "external_data" in params:
+      return {"external_data": False}
+    if "use_external_data_format" in params:
+      return {"use_external_data_format": False}
+    return {}
+
+  def inline_external_onnx_data(onnx_path: Path) -> None:
+    """Merge external tensor data back into a single ONNX file if needed."""
+    data_path = Path(str(onnx_path) + ".data")
+    if not data_path.exists():
+      return
+
+    try:
+      import onnx
+
+      model = onnx.load(str(onnx_path), load_external_data=True)
+      onnx.save_model(model, str(onnx_path), save_as_external_data=False)
+      if data_path.exists():
+        data_path.unlink()
+      print(f"[INFO]: Inlined external ONNX data into single file: {onnx_path}")
+    except Exception as exc:
+      print(f"[WARN]: Failed to inline ONNX external data for {onnx_path}: {exc}")
+
   class _OnnxPolicyWrapper(torch.nn.Module):
     """Expose act_inference as forward and optionally include obs normalizer."""
 
@@ -62,9 +93,11 @@ def run_play(task_id: str, cfg: PlayConfig):
     # Prefer runner-provided exporters to keep behavior consistent with training.
     if hasattr(runner, "export_policy_to_onnx"):
       runner.export_policy_to_onnx(str(output_path.parent), output_path.name)
+      inline_external_onnx_data(output_path)
       return
     if hasattr(runner, "_export_policy_to_onnx"):
       runner._export_policy_to_onnx(str(output_path.parent), output_path.name)
+      inline_external_onnx_data(output_path)
       return
 
     # Fallback exporter for runners without explicit ONNX export helper.
@@ -91,7 +124,9 @@ def run_play(task_id: str, cfg: PlayConfig):
       input_names=["obs"],
       output_names=["actions"],
       dynamic_axes={"obs": {0: "batch"}, "actions": {0: "batch"}},
+      **onnx_export_kwargs_single_file(),
     )
+    inline_external_onnx_data(output_path)
 
     runner_device = getattr(runner, "device", None)
     if runner_device is not None:

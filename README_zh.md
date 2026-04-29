@@ -1,4 +1,6 @@
-# wbc_mjlab
+# AMP_mjlab
+
+[English README](README.md)
 
 基于 mjlab + rsl_rl 的 G1 AMP 运动控制项目。
 
