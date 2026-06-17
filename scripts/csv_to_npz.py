@@ -394,6 +394,30 @@ def run_sim(
           iio.imwrite(str(mp4_path), np.stack(frames, axis=0), fps=output_fps)
 
 
+def make_casbot_scene_cfg():
+  """Build a minimal SceneCfg for casbot_skeleton."""
+  from src.assets.robots import get_casbot_robot_cfg
+  from mjlab.scene import SceneCfg
+
+  return SceneCfg(
+    entities={"robot": get_casbot_robot_cfg()},
+    num_envs=1,
+    extent=2.0,
+  )
+
+
+def make_marathon_scene_cfg():
+  """Build a minimal SceneCfg for marathon_001."""
+  from src.assets.robots import get_marathon_robot_cfg
+  from mjlab.scene import SceneCfg
+
+  return SceneCfg(
+    entities={"robot": get_marathon_robot_cfg()},
+    num_envs=1,
+    extent=2.0,
+  )
+
+
 def main(
   input_file: str | None = None,
   output_name: str | None = None,
@@ -409,6 +433,7 @@ def main(
   video_output: str | None = None,
   render_entity_name: str | None = "robot",
   line_range: tuple[int, int] | None = None,
+  robot: Literal["g1", "casbot_skeleton", "marathon_001"] = "g1",
 ):
   """Replay motion from CSV file and output to npz file.
 
@@ -427,6 +452,7 @@ def main(
     video_output: Optional output path for mp4 video (offscreen backend only).
     render_entity_name: Entity to track when rendering with ASSET_ROOT camera.
     line_range: Range of lines to process from the CSV file.
+    robot: Robot type to use ("g1", "casbot_skeleton", or "marathon_001").
   """
   if input_file is None and input_dir is None:
     raise ValueError("Either --input_file or --input_dir must be specified.")
@@ -445,7 +471,14 @@ def main(
   sim_cfg = SimulationCfg()
   sim_cfg.mujoco.timestep = 1.0 / output_fps
 
-  scene = Scene(unitree_g1_flat_tracking_env_cfg().scene, device=device)
+  if robot == "casbot_skeleton":
+    scene_cfg = make_casbot_scene_cfg()
+  elif robot == "marathon_001":
+    scene_cfg = make_marathon_scene_cfg()
+  else:
+    scene_cfg = unitree_g1_flat_tracking_env_cfg().scene
+
+  scene = Scene(scene_cfg, device=device)
   model = scene.compile()
 
   sim = Simulation(num_envs=1, cfg=sim_cfg, model=model, device=device)
@@ -477,37 +510,87 @@ def main(
     )
     renderer.initialize()
 
-  joint_names = [
-    "left_hip_pitch_joint",
-    "left_hip_roll_joint",
-    "left_hip_yaw_joint",
-    "left_knee_joint",
-    "left_ankle_pitch_joint",
-    "left_ankle_roll_joint",
-    "right_hip_pitch_joint",
-    "right_hip_roll_joint",
-    "right_hip_yaw_joint",
-    "right_knee_joint",
-    "right_ankle_pitch_joint",
-    "right_ankle_roll_joint",
-    "waist_yaw_joint",
-    "waist_roll_joint",
-    "waist_pitch_joint",
-    "left_shoulder_pitch_joint",
-    "left_shoulder_roll_joint",
-    "left_shoulder_yaw_joint",
-    "left_elbow_joint",
-    "left_wrist_roll_joint",
-    "left_wrist_pitch_joint",
-    "left_wrist_yaw_joint",
-    "right_shoulder_pitch_joint",
-    "right_shoulder_roll_joint",
-    "right_shoulder_yaw_joint",
-    "right_elbow_joint",
-    "right_wrist_roll_joint",
-    "right_wrist_pitch_joint",
-    "right_wrist_yaw_joint",
-  ]
+  if robot == "casbot_skeleton":
+    joint_names = [
+      "left_leg_pelvic_pitch_joint",
+      "left_leg_pelvic_roll_joint",
+      "left_leg_pelvic_yaw_joint",
+      "left_leg_knee_pitch_joint",
+      "left_leg_ankle_pitch_joint",
+      "left_leg_ankle_roll_joint",
+      "right_leg_pelvic_pitch_joint",
+      "right_leg_pelvic_roll_joint",
+      "right_leg_pelvic_yaw_joint",
+      "right_leg_knee_pitch_joint",
+      "right_leg_ankle_pitch_joint",
+      "right_leg_ankle_roll_joint",
+      "waist_yaw_joint",
+      "head_yaw_joint",
+      "head_pitch_joint",
+      "left_shoulder_pitch_joint",
+      "left_shoulder_roll_joint",
+      "left_shoulder_yaw_joint",
+      "left_elbow_pitch_joint",
+      "left_wrist_yaw_joint",
+      "right_shoulder_pitch_joint",
+      "right_shoulder_roll_joint",
+      "right_shoulder_yaw_joint",
+      "right_elbow_pitch_joint",
+      "right_wrist_yaw_joint",
+    ]
+  elif robot == "marathon_001":
+    joint_names = [
+      "right_shoulder_pitch_joint",
+      "right_shoulder_roll_joint",
+      "right_elbow_pitch_joint",
+      "left_shoulder_pitch_joint",
+      "left_shoulder_roll_joint",
+      "left_elbow_pitch_joint",
+      "right_leg_pelvic_pitch_joint",
+      "right_leg_pelvic_roll_joint",
+      "right_leg_pelvic_yaw_joint",
+      "right_leg_knee_pitch_joint",
+      "right_leg_ankle_pitch_joint",
+      "right_leg_ankle_roll_joint",
+      "left_leg_pelvic_pitch_joint",
+      "left_leg_pelvic_roll_joint",
+      "left_leg_pelvic_yaw_joint",
+      "left_leg_knee_pitch_joint",
+      "left_leg_ankle_pitch_joint",
+      "left_leg_ankle_roll_joint",
+    ]
+  else:
+    joint_names = [
+      "left_hip_pitch_joint",
+      "left_hip_roll_joint",
+      "left_hip_yaw_joint",
+      "left_knee_joint",
+      "left_ankle_pitch_joint",
+      "left_ankle_roll_joint",
+      "right_hip_pitch_joint",
+      "right_hip_roll_joint",
+      "right_hip_yaw_joint",
+      "right_knee_joint",
+      "right_ankle_pitch_joint",
+      "right_ankle_roll_joint",
+      "waist_yaw_joint",
+      "waist_roll_joint",
+      "waist_pitch_joint",
+      "left_shoulder_pitch_joint",
+      "left_shoulder_roll_joint",
+      "left_shoulder_yaw_joint",
+      "left_elbow_joint",
+      "left_wrist_roll_joint",
+      "left_wrist_pitch_joint",
+      "left_wrist_yaw_joint",
+      "right_shoulder_pitch_joint",
+      "right_shoulder_roll_joint",
+      "right_shoulder_yaw_joint",
+      "right_elbow_joint",
+      "right_wrist_roll_joint",
+      "right_wrist_pitch_joint",
+      "right_wrist_yaw_joint",
+    ]
 
   for i, (cur_input_file, cur_output_name) in enumerate(file_pairs):
     if len(file_pairs) > 1:
