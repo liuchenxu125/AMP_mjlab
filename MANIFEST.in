@@ -1,0 +1,9 @@
+include src/assets/robots/*/meshes/*.STL
+include src/assets/robots/*/urdf/*.urdf
+include src/assets/robots/*/urdf/*.xml
+include src/assets/robots/*/xmls/*.xml
+include src/assets/robots/*/*.xml
+include src/assets/motions/*/amp/WalkandRun/*.npz
+include src/assets/motions/*/amp/WalkandRun/*.csv
+include src/assets/motions/*/amp/Recovery/*.npz
+include src/assets/motions/*/amp/Recovery/*.csv

@@ -1,0 +1,14 @@
+name: mjlab
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - mjlab==1.2.0
+      - -e rsl_rl/
+      - -e .
