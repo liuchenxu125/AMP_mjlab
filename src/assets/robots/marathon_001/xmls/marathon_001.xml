@@ -38,7 +38,6 @@
   </asset>
 
   <worldbody>
-    <geom name="ground" type="plane" pos="0 0 0" size="10 10 0.1" material="grid" condim="3" />
     <light name="main_light" pos="0 -3 5" dir="0 1 -1" diffuse="1 1 1" specular="0.5 0.5 0.5" directional="true" castshadow="true" />
     <body name="base_link" pos="0 0 0.868" >
       <inertial pos="-0.0004287 -1.711e-05 0.23553" quat="1 0 0 0" mass="15.517" diaginertia="0.53359 0.5071 0.094812"/>
