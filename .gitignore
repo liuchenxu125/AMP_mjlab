@@ -43,5 +43,9 @@ src/tasks/uni_track
 # Temporary logs and outputs
 logs.png
 nohup_*
-RoboMimic_Deploy/
 motion_data_csv/
+
+# RoboMimic_Deploy: large binary / third-party directories
+RoboMimic_Deploy/wbc_fsm/hl_motion/
+RoboMimic_Deploy/wbc_fsm/onnxruntime-linux-x64-1.22.0/
+RoboMimic_Deploy/unitree_sdk2_python/
