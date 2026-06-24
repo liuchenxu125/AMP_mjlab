@@ -183,6 +183,16 @@ KNEES_BENT_KEYFRAME = EntityCfg.InitialStateCfg(
 # Collision config.
 ##
 
+##修改xml碰撞体前的设置
+# FULL_COLLISION = CollisionCfg(
+#   geom_names_expr=(".*",),
+#   condim={r"^(left|right)_foot_collision$": 3, ".*": 1},
+#   priority={r"^(left|right)_foot_collision$": 1},
+#   friction={r"^(left|right)_foot_collision$": (0.6,)},
+# )
+
+
+
 FULL_COLLISION = CollisionCfg(
   geom_names_expr=(".*_collision",),
   condim={r"^(left|right)_foot[1-7]_collision$": 3, ".*_collision": 1},

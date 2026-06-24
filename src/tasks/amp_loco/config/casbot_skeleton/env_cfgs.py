@@ -35,6 +35,7 @@ def casbot_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       sensor.frame.name = "base_link"
 
   site_names = ("left_foot", "right_foot")
+  #geom_names = ("left_foot_collision", "right_foot_collision")   ##这是修改xml碰撞体前的设置
   geom_names = tuple(
     f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 8)
   )
