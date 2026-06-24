@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>casbot_ros2</name>
+  <version>0.1.0</version>
+  <description>Casbot Skeleton AMP locomotion policy — ROS2 real-robot deployment.</description>
+  <maintainer email="user@example.com">Casbot Team</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>crb_ros_msg</depend>
+  <depend>Eigen3</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
