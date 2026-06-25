@@ -23,9 +23,9 @@ dof_vel_scale: 1.0
 
 # Velocity limits (same as MJAMP)
 vx_limit_min: -0.8
-vx_limit_max: 2.5
+vx_limit_max: 2.0
 vx_limit_min_slow: -0.8
-vx_limit_max_slow: 1.0
+vx_limit_max_slow: 1.5
 vy_limit_min: -1.0
 vy_limit_max: 1.0
 wyaw_limit_min: -3.14

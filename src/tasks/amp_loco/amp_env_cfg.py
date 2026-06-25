@@ -196,7 +196,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       heading_control_stiffness=0.5,
       debug_vis=True,
       ranges=UniformVelocityCommandCfg.Ranges(
-        lin_vel_x=(-1.5, 2.0),
+        lin_vel_x=(-1.5, 3.0),
         lin_vel_y=(-1.0, 1.0),
         ang_vel_z=(-3.14 / 2, 3.14 / 2),
         heading=(-math.pi / 2, math.pi / 2),
