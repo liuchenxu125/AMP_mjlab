@@ -42,7 +42,7 @@ src/tasks/uni_track
 
 # Temporary logs and outputs
 logs.png
-nohup_*
+
 motion_data_csv/
 
 # RoboMimic_Deploy: large binary / third-party directories
