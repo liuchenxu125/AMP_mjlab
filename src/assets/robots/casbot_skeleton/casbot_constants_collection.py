@@ -194,24 +194,23 @@ KNEES_BENT_KEYFRAME = EntityCfg.InitialStateCfg(
 
 
 FULL_COLLISION = CollisionCfg(
-  # 匹配两类碰撞几何体:
-  #   - _collision: 全身胶囊体/球体 (快速碰撞检测, body间自碰撞)
-  #   - _stl_collision: 脚部STL网格 (精确足-地接触, 仅左右脚)
-  geom_names_expr=(".*_collision", ".*_stl_collision"),
+  # 只匹配胶囊碰撞体 (无STL, STL仅视觉)
+  # 足部: 14条胶囊 foot1~14, 全身: 各body胶囊
+  geom_names_expr=(".*_collision",),
   condim={
-    # 脚部: condim=3 启用完整摩擦锥 (静摩擦+动摩擦), 地面接触需要
-    r"^(left|right)_foot[1-7]_collision$": 3,
-    r"^(left|right)_foot_stl_collision$": 3,
-    # 其他碰撞体: condim=1 只检测接触力, 无摩擦
+    # 足部14胶囊: condim=3 完整摩擦锥
+    r"^(left|right)_foot[0-9]+_collision$": 3,
+    r"^(left|right)_foot1[0-4]_collision$": 3,
+    # 其他碰撞体: condim=1
     ".*_collision": 1,
   },
   priority={
-    r"^(left|right)_foot[1-7]_collision$": 1,
-    r"^(left|right)_foot_stl_collision$": 1,
+    r"^(left|right)_foot[0-9]+_collision$": 1,
+    r"^(left|right)_foot1[0-4]_collision$": 1,
   },
   friction={
-    r"^(left|right)_foot[1-7]_collision$": (0.6,),
-    r"^(left|right)_foot_stl_collision$": (0.6,),
+    r"^(left|right)_foot[0-9]+_collision$": (0.6,),
+    r"^(left|right)_foot1[0-4]_collision$": (0.6,),
   },
 )
 

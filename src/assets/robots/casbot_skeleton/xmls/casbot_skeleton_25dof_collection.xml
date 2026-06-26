@@ -83,18 +83,37 @@
                   <inertial pos="0.0187444 0.00117256 -0.0409485" quat="-0.0190107 0.668942 -0.0359937 0.742199" mass="0.882585" diaginertia="0.0045177 0.00422814 0.00101679"/>
                   <joint name="left_leg_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.50614 0.50614"/>
                   <geom class="visual" mesh="left_leg_ankle_roll_link" rgba="0.792157 0.819608 0.933333 1"/>
-                  <!-- STL碰撞几何体: 脚部形状复杂, 用STL网格做精确地面接触检测 -->
-                  <geom name="left_foot_stl_collision" type="mesh" contype="1" conaffinity="1"
-                        mesh="left_leg_ankle_roll_link" group="3" rgba="0.8 0.2 0.2 0.3"/>
-                  <!-- 足部胶囊碰撞体: 保留用于身体间自碰撞检测 -->
-                  <geom name="left_foot1_collision" class="foot_capsule" fromto="0.10 -0.026 -0.04 0.05 -0.027 -0.04"/>
-                  <geom name="left_foot2_collision" class="foot_capsule" fromto="-0.044 -0.018 -0.04 0.123 -0.018 -0.04"/>
-                  <geom name="left_foot3_collision" class="foot_capsule" fromto="-0.052 -0.01  -0.04 0.13  -0.01  -0.04"/>
-                  <geom name="left_foot4_collision" class="foot_capsule" fromto="-0.054  0      -0.04 0.132  0      -0.04"/>
-                  <geom name="left_foot5_collision" class="foot_capsule" fromto="-0.052  0.01  -0.04 0.13   0.01  -0.04"/>
-                  <geom name="left_foot6_collision" class="foot_capsule" fromto="-0.044  0.018 -0.04 0.123  0.018 -0.04"/>
-                  <geom name="left_foot7_collision" class="foot_capsule" fromto="0.10   0.026 -0.04 0.05   0.026 -0.04"/>
-                  <site name="left_foot" pos="0.04 0 -0.05" size="0.02"/>
+                  <!--
+                    足部14胶囊碰撞体 — 根据脚底STL实际尺寸精确放置
+                    STL脚底 (ankle_roll body frame):
+                      X: -0.102(跟) ~ 0.173(趾)  跨度0.275
+                      Y: -0.061 ~ 0.061           跨度0.122
+                      Z底: -0.065
+                    14条前后向胶囊, Y间距≈0.008~0.010, Z中心=-0.055
+                  -->
+                  <!-- Y=0 中心 -->
+                  <geom name="left_foot1_collision"  class="foot_capsule" fromto="-0.10  0.000 -0.055  0.17  0.000 -0.055"/>
+                  <!-- Y=±0.008 -->
+                  <geom name="left_foot2_collision"  class="foot_capsule" fromto="-0.10  0.008 -0.055  0.17  0.008 -0.055"/>
+                  <geom name="left_foot3_collision"  class="foot_capsule" fromto="-0.10 -0.008 -0.055  0.17 -0.008 -0.055"/>
+                  <!-- Y=±0.016 -->
+                  <geom name="left_foot4_collision"  class="foot_capsule" fromto="-0.09  0.016 -0.055  0.17  0.016 -0.055"/>
+                  <geom name="left_foot5_collision"  class="foot_capsule" fromto="-0.09 -0.016 -0.055  0.17 -0.016 -0.055"/>
+                  <!-- Y=±0.024 -->
+                  <geom name="left_foot6_collision"  class="foot_capsule" fromto="-0.09  0.024 -0.055  0.17  0.024 -0.055"/>
+                  <geom name="left_foot7_collision"  class="foot_capsule" fromto="-0.09 -0.024 -0.055  0.17 -0.024 -0.055"/>
+                  <!-- Y=±0.032 -->
+                  <geom name="left_foot8_collision"  class="foot_capsule" fromto="-0.08  0.032 -0.055  0.17  0.032 -0.055"/>
+                  <geom name="left_foot9_collision"  class="foot_capsule" fromto="-0.08 -0.032 -0.055  0.17 -0.032 -0.055"/>
+                  <!-- Y=±0.042 (脚跟开始向内收) -->
+                  <geom name="left_foot10_collision" class="foot_capsule" fromto="-0.06  0.042 -0.055  0.16  0.042 -0.055"/>
+                  <geom name="left_foot11_collision" class="foot_capsule" fromto="-0.06 -0.042 -0.055  0.16 -0.042 -0.055"/>
+                  <!-- Y=±0.052 (边缘, 仅前脚掌) -->
+                  <geom name="left_foot12_collision" class="foot_capsule" fromto="0.04  0.052 -0.055  0.15  0.052 -0.055"/>
+                  <geom name="left_foot13_collision" class="foot_capsule" fromto="0.04 -0.052 -0.055  0.15 -0.052 -0.055"/>
+                  <!-- Y=±0.058 (最边缘, 仅趾部) -->
+                  <geom name="left_foot14_collision" class="foot_capsule" fromto="0.08  0.058 -0.055  0.14  0.058 -0.055"/>
+                  <site name="left_foot" pos="0.04 0 -0.06" size="0.02"/>
                 </body>
               </body>
             </body>
@@ -132,18 +151,32 @@
                   <inertial pos="0.0195121 -0.00117074 -0.0336112" quat="0.011605 0.679583 0.0284444 0.732955" mass="0.882445" diaginertia="0.0047921 0.00448529 0.00114232"/>
                   <joint name="right_leg_ankle_roll_joint" pos="0 0 0" axis="1 0 0" range="-0.50614 0.50614"/>
                   <geom class="visual" mesh="right_leg_ankle_roll_link" rgba="0.792157 0.819608 0.933333 1"/>
-                  <!-- STL碰撞几何体: 脚部形状复杂, 用STL网格做精确地面接触检测 -->
-                  <geom name="right_foot_stl_collision" type="mesh" contype="1" conaffinity="1"
-                        mesh="right_leg_ankle_roll_link" group="3" rgba="0.8 0.2 0.2 0.3"/>
-                  <!-- 足部胶囊碰撞体: 保留用于身体间自碰撞检测 -->
-                  <geom name="right_foot1_collision" class="foot_capsule" fromto="0.10 -0.026 -0.04 0.05 -0.026 -0.04"/>
-                  <geom name="right_foot2_collision" class="foot_capsule" fromto="-0.044 -0.018 -0.04 0.123 -0.018 -0.04"/>
-                  <geom name="right_foot3_collision" class="foot_capsule" fromto="-0.052 -0.01  -0.04 0.13  -0.01  -0.04"/>
-                  <geom name="right_foot4_collision" class="foot_capsule" fromto="-0.054  0      -0.04 0.132  0      -0.04"/>
-                  <geom name="right_foot5_collision" class="foot_capsule" fromto="-0.052  0.01  -0.04 0.13   0.01  -0.04"/>
-                  <geom name="right_foot6_collision" class="foot_capsule" fromto="-0.044  0.018 -0.04 0.123  0.018 -0.04"/>
-                  <geom name="right_foot7_collision" class="foot_capsule" fromto="0.10   0.026 -0.04 0.05   0.026 -0.04"/>
-                  <site name="right_foot" pos="0.04 0 -0.05" size="0.02"/>
+                  <!--
+                    足部14胶囊碰撞体 — 右脚=左脚Y镜像
+                  -->
+                  <!-- Y=0 中心 -->
+                  <geom name="right_foot1_collision"  class="foot_capsule" fromto="-0.10  0.000 -0.055  0.17  0.000 -0.055"/>
+                  <!-- Y=±0.008 (右脚正Y=外侧, 负Y=内侧; 此处与左脚Y符号相反即镜像) -->
+                  <geom name="right_foot2_collision"  class="foot_capsule" fromto="-0.10 -0.008 -0.055  0.17 -0.008 -0.055"/>
+                  <geom name="right_foot3_collision"  class="foot_capsule" fromto="-0.10  0.008 -0.055  0.17  0.008 -0.055"/>
+                  <!-- Y=±0.016 -->
+                  <geom name="right_foot4_collision"  class="foot_capsule" fromto="-0.09 -0.016 -0.055  0.17 -0.016 -0.055"/>
+                  <geom name="right_foot5_collision"  class="foot_capsule" fromto="-0.09  0.016 -0.055  0.17  0.016 -0.055"/>
+                  <!-- Y=±0.024 -->
+                  <geom name="right_foot6_collision"  class="foot_capsule" fromto="-0.09 -0.024 -0.055  0.17 -0.024 -0.055"/>
+                  <geom name="right_foot7_collision"  class="foot_capsule" fromto="-0.09  0.024 -0.055  0.17  0.024 -0.055"/>
+                  <!-- Y=±0.032 -->
+                  <geom name="right_foot8_collision"  class="foot_capsule" fromto="-0.08 -0.032 -0.055  0.17 -0.032 -0.055"/>
+                  <geom name="right_foot9_collision"  class="foot_capsule" fromto="-0.08  0.032 -0.055  0.17  0.032 -0.055"/>
+                  <!-- Y=±0.042 -->
+                  <geom name="right_foot10_collision" class="foot_capsule" fromto="-0.06 -0.042 -0.055  0.16 -0.042 -0.055"/>
+                  <geom name="right_foot11_collision" class="foot_capsule" fromto="-0.06  0.042 -0.055  0.16  0.042 -0.055"/>
+                  <!-- Y=±0.052 -->
+                  <geom name="right_foot12_collision" class="foot_capsule" fromto="0.04 -0.052 -0.055  0.15 -0.052 -0.055"/>
+                  <geom name="right_foot13_collision" class="foot_capsule" fromto="0.04  0.052 -0.055  0.15  0.052 -0.055"/>
+                  <!-- Y=±0.058 -->
+                  <geom name="right_foot14_collision" class="foot_capsule" fromto="0.08 -0.058 -0.055  0.14 -0.058 -0.055"/>
+                  <site name="right_foot" pos="0.04 0 -0.06" size="0.02"/>
                 </body>
               </body>
             </body>

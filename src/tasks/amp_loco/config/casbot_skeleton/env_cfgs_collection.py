@@ -35,10 +35,10 @@ def casbot_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       sensor.frame.name = "base_link"
 
   site_names = ("left_foot", "right_foot")
-  # 脚部碰撞几何体: 7个胶囊体(自碰撞) + STL网格(地面接触)
+  # 脚部碰撞几何体: 14条胶囊体 (根据STL脚底实际尺寸精确放置)
   geom_names = tuple(
-    f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 8)
-  ) + ("left_foot_stl_collision", "right_foot_stl_collision")
+    f"{side}_foot{i}_collision" for side in ("left", "right") for i in range(1, 15)
+  )
   body_names = (
     "base_link",
     "left_leg_pelvic_roll_link",
