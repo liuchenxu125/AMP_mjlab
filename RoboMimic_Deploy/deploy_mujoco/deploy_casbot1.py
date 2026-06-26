@@ -6,9 +6,6 @@ with CasbotAMP ONNX locomotion policy (Xbox Joystick).
 Single-policy deployment (no FSM). Loads the Casbot Skeleton MJCF model,
 runs the AMP locomotion policy, and supports Xbox joystick control.
 
-Usage:
-    python deploy_mujoco/deploy_casbot.py
-
 Xbox Joystick Controls:
     Left Stick Y     — Forward / Backward
     Left Stick X     — Lateral left / right
@@ -20,7 +17,6 @@ Xbox Joystick Controls:
 
 import sys
 from pathlib import Path
-
 sys.path.append(str(Path(__file__).parent.parent.absolute()))
 
 import time
@@ -33,19 +29,11 @@ from policy.casbot_amp.CasbotAMP import CasbotAMP
 from common.joystick import JoyStick, JoystickButton
 
 
-# ══════════════════════════════════════════════════════════════════════
-#  PD controller
-# ══════════════════════════════════════════════════════════════════════
-
 def pd_control(target_q, q, kp, target_dq, dq, kd, tau_limit):
     """Compute joint torques from position targets, clamped to effort limits."""
     tau = (target_q - q) * kp + (target_dq - dq) * kd
     return np.clip(tau, -tau_limit, tau_limit)
 
-
-# ══════════════════════════════════════════════════════════════════════
-#  Main
-# ══════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
     PROJECT_ROOT = Path(__file__).parent.parent.absolute()
@@ -54,16 +42,15 @@ if __name__ == "__main__":
     xml_path = str(PROJECT_ROOT / "casbot_skeleton" / "scene.xml")
     print(f"[Deploy] Loading model: {xml_path}")
 
-    # ── Simulation parameters (same as MJAMP MuJoCo deploy) ──
+    # ── Simulation parameters ──
     simulation_dt = 0.002
-    control_decimation = 10  # policy runs at ~48 Hz
+    control_decimation = 10  # policy @ 50 Hz (500Hz / 10)
 
     # ── Load MuJoCo model ──
     m = mujoco.MjModel.from_xml_path(xml_path)
     d = mujoco.MjData(m)
     m.opt.timestep = simulation_dt
-
-    num_joints = m.nu  # number of actuators (25)
+    num_joints = m.nu
     print(f"[Deploy] Model loaded: {num_joints} actuators, dt={simulation_dt}")
 
     # ── Initialize policy ──
@@ -79,24 +66,21 @@ if __name__ == "__main__":
     try:
         joystick = JoyStick()
         print(f"[Deploy] Joystick connected: {joystick.joystick.get_name()}")
-        print(f"  Buttons: {joystick.button_count}, Axes: {joystick.axis_count}")
     except RuntimeError as e:
         print(f"[Deploy] ERROR: {e}")
-        print("[Deploy] Please connect an Xbox controller and try again.")
         sys.exit(1)
 
     running = True
 
-    # ── Initialization phase ──
-    base_quat = d.qpos[3:7].copy()  # [qw, qx, qy, qz]
+    # ── Initialization ──
+    base_quat = d.qpos[3:7].copy()
     ang_vel = d.qvel[3:6].copy()
     qj = d.qpos[7:].copy()
     dqj = d.qvel[6:].copy()
-
     policy.init_buffers(base_quat, ang_vel, qj, dqj)
     policy_actions = policy._target_pos.copy()
 
-    print("[Deploy] Initialization complete. Starting simulation...")
+    print("[Deploy] Starting simulation...")
     print("  Controls:")
     print("    Left Stick   — Move forward/back, lateral left/right")
     print("    Right Stick  — Yaw rotation")
@@ -104,20 +88,28 @@ if __name__ == "__main__":
     print("    START        — Reset robot pose")
     print("    SELECT       — Exit")
 
-    # ── Main simulation loop ──
+    # ══════════════════════════════════════════════════════════
+    #  Main loop
+    # ══════════════════════════════════════════════════════════
+    # Timing profiler
+    t_joystick_total = 0.0; t_pd_total = 0.0; t_infer_total = 0.0
+    t_sync_total = 0.0; t_sleep_total = 0.0; t_frame_total = 0.0
+    t_frame_max = 0.0; infer_count = 0
+    profile_interval = 50
+    log_slow_frames = True
+
     with mujoco.viewer.launch_passive(m, d) as viewer:
         while viewer.is_running() and running:
-            step_start = time.time()
+            step_start = time.perf_counter()
 
             # ── Joystick input ──
+            t0 = time.perf_counter()
             joystick.update()
 
-            # Exit: SELECT button
             if joystick.is_button_pressed(JoystickButton.SELECT):
                 print("[Deploy] SELECT pressed — exiting")
                 running = False
 
-            # Reset pose: START button
             if joystick.is_button_released(JoystickButton.START):
                 print("[Deploy] START pressed — resetting pose")
                 d.qpos[7:] = policy.default_dof_pos.copy()
@@ -130,56 +122,84 @@ if __name__ == "__main__":
                 policy.init_buffers(base_quat, ang_vel, qj, dqj)
                 policy_actions = policy._target_pos.copy()
 
-            # Speed mode: R2 (RT) held → high speed
-            # On Xbox controllers, RT is axis 5 (value ~1.0 when pressed)
-            r2_axis = joystick.get_axis_value(5)  # RT / R2 axis
+            r2_axis = joystick.get_axis_value(5)
             high_speed = r2_axis > 0.3
             if high_speed != policy.high_speed_mode:
                 policy.high_speed_mode = high_speed
-                mode_str = "HIGH" if high_speed else "LOW"
-                print(f"[Deploy] Speed mode: {mode_str}")
+                print(f"[Deploy] Speed mode: {'HIGH' if high_speed else 'LOW'}")
 
-            # ── Velocity commands (same convention as deploy_mujoco.py G1) ──
-            ly_raw = -joystick.get_axis_value(1)   # left stick Y, inverted
-            lx_raw = -joystick.get_axis_value(0)   # left stick X, inverted
-            rx_raw = -joystick.get_axis_value(3)   # right stick X, inverted
-
+            ly_raw = -joystick.get_axis_value(1)
+            lx_raw = -joystick.get_axis_value(0)
+            rx_raw = -joystick.get_axis_value(3)
             cmd_vel = policy.get_user_cmd(ly_raw, lx_raw, rx_raw)
+            t_joystick = time.perf_counter() - t0
 
             # ── PD control & physics step ──
-            tau = pd_control(
-                policy_actions,
-                d.qpos[7:],
-                kps,
-                np.zeros_like(kps),
-                d.qvel[6:],
-                kds,
-                policy.tau_limit,
-            )
+            t0 = time.perf_counter()
+            tau = pd_control(policy_actions, d.qpos[7:], kps,
+                           np.zeros_like(kps), d.qvel[6:], kds, policy.tau_limit)
             d.ctrl[:] = tau
             mujoco.mj_step(m, d)
+            t_pd = time.perf_counter() - t0
 
             # ── Policy inference (decimated) ──
             sim_counter += 1
+            t_infer = 0.0
             if sim_counter % control_decimation == 0:
+                t0 = time.perf_counter()
                 base_quat = d.qpos[3:7].copy()
                 ang_vel = d.qvel[3:6].copy()
                 qj = d.qpos[7:].copy()
                 dqj = d.qvel[6:].copy()
-
                 result = policy.step(base_quat, ang_vel, cmd_vel, qj, dqj)
-
                 policy_actions = result["actions"].copy()
                 kps = result["kps"].copy()
                 kds = result["kds"].copy()
-
+                t_infer = time.perf_counter() - t0
+                infer_count += 1
                 if result["terminated"]:
                     print("[Deploy] SAFETY: anchor gravity threshold exceeded!")
 
             # ── Sync ──
+            t0 = time.perf_counter()
             viewer.sync()
-            time_until_next = m.opt.timestep - (time.time() - step_start)
+            t_sync = time.perf_counter() - t0
+
+            # ── Sleep ──
+            time_until_next = m.opt.timestep - (time.perf_counter() - step_start)
+            t_sleep = 0.0
             if time_until_next > 0:
                 time.sleep(time_until_next)
+                t_sleep = time_until_next
+
+            # ── Accumulate timing ──
+            frame_time = time.perf_counter() - step_start
+            t_joystick_total += t_joystick
+            t_pd_total += t_pd
+            t_infer_total += t_infer
+            t_sync_total += t_sync
+            t_sleep_total += t_sleep
+            t_frame_total += frame_time
+            if frame_time > t_frame_max:
+                t_frame_max = frame_time
+
+            if log_slow_frames and frame_time > simulation_dt * 2.5:
+                print(f"[TIMING SLOW] frame={sim_counter:5d}  total={frame_time*1000:6.2f}ms "
+                      f"(expect {simulation_dt*1000:.1f}ms)  "
+                      f"joystick={t_joystick*1000:.2f}ms  pd={t_pd*1000:.2f}ms  "
+                      f"infer={t_infer*1000:.2f}ms  sync={t_sync*1000:.2f}ms")
+
+            if sim_counter % profile_interval == 0:
+                avg_frame = t_frame_total / profile_interval * 1000
+                avg_pd = t_pd_total / profile_interval * 1000
+                avg_sync = t_sync_total / profile_interval * 1000
+                avg_infer = t_infer_total / max(infer_count, 1) * 1000 if infer_count > 0 else 0
+                print(f"[TIMING] frames={sim_counter:5d}  "
+                      f"avg_frame={avg_frame:5.2f}ms  avg_pd={avg_pd:5.2f}ms  "
+                      f"avg_sync={avg_sync:5.2f}ms  avg_infer={avg_infer:5.2f}ms  "
+                      f"max_frame={t_frame_max*1000:5.2f}ms  infer_count={infer_count}")
+                t_joystick_total = 0.0; t_pd_total = 0.0; t_infer_total = 0.0
+                t_sync_total = 0.0; t_sleep_total = 0.0; t_frame_total = 0.0
+                t_frame_max = 0.0; infer_count = 0
 
     print("[Deploy] Simulation ended.")
