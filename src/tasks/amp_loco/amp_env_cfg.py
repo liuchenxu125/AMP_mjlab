@@ -291,7 +291,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       func=dr.body_mass,
       params={
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # per-robot fills
-        "ranges": (-0.3, 0.8),
+        "ranges": (-0.2, 0.5),
         "distribution": "uniform",
         "operation": "add",
       },
