@@ -97,10 +97,6 @@ def casbot_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   twist_cmd.viz.z_offset = 1.15
 
   cfg.events["foot_friction"].params["asset_cfg"].geom_names = geom_names
-
-  # ── [NEW] 质量随机化: 全身所有body (和mimic一样, operation="add", -0.3~+0.8 kg) ──
-  cfg.events["base_mass"].params["asset_cfg"].body_names = (".*",)
-
   cfg.events["base_com"].params["asset_cfg"].body_names = ("waist_yaw_link",)
 
   # Configure motion reset to sample from the entire motion with a delay.

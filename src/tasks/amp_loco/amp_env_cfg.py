@@ -273,6 +273,29 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         },
       },
     ),
+    # ── [NEW] 关节零位偏移 — sim-to-real: 装配/编码器零点误差 ──
+    "joint_default_pos": EventTermCfg(
+      mode="startup",
+      func=dr.joint_default_pos,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+        "ranges": (-0.01, 0.01),        # ±0.01 rad 零位偏移
+        "distribution": "uniform",
+        "operation": "add",
+      },
+    ),
+    # ── [NEW] 质量随机化 — sim-to-real: 真机质量与URDF不一致 ──
+    # 全身body随机加减 -0.3~+0.8 kg (和mimic保持一致, operation="add")
+    "base_mass": EventTermCfg(
+      mode="startup",
+      func=dr.body_mass,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", body_names=()),  # per-robot fills
+        "ranges": (-0.3, 0.8),
+        "distribution": "uniform",
+        "operation": "add",
+      },
+    ),
   }
 
   ##
