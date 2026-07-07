@@ -49,7 +49,7 @@
     <body name="base_link" pos="0 0 0.868" quat="1 0 0 0">
       <inertial pos="0.00090049 3.158E-05 0.059413" mass="4.478" diaginertia="0.013418 0.0086488 0.011258"/>
       <freejoint name="base_link"/>
-      <site name="imu" pos="0.0 0 0.0" quat="1 0 0 0" size="0.078" rgba="255 0 0 1"/>
+      <site name="imu" pos="0.0 0 0.138" quat="1 0 0 0" size="0.078" rgba="255 0 0 1"/>
       <geom type="mesh" mesh="base_link" rgba="0.79216 0.81961 0.93333 1"/>
       <geom type="mesh" mesh="base_link" rgba="0.79216 0.81961 0.93333 1" group="1"/>
       <body name="left_leg_pelvic_pitch_link" pos="0 0.061 0.0575">
@@ -183,6 +183,34 @@
       </body>
     </body>
   </worldbody>
+
+  <actuator>
+    <motor name="left_leg_pelvic_pitch_joint" joint="left_leg_pelvic_pitch_joint"/>
+    <motor name="left_leg_pelvic_roll_joint" joint="left_leg_pelvic_roll_joint"/>
+    <motor name="left_leg_pelvic_yaw_joint" joint="left_leg_pelvic_yaw_joint"/>
+    <motor name="left_leg_knee_pitch_joint" joint="left_leg_knee_pitch_joint"/>
+    <motor name="left_leg_ankle_pitch_joint" joint="left_leg_ankle_pitch_joint"/>
+    <motor name="left_leg_ankle_roll_joint" joint="left_leg_ankle_roll_joint"/>
+    <motor name="right_leg_pelvic_pitch_joint" joint="right_leg_pelvic_pitch_joint"/>
+    <motor name="right_leg_pelvic_roll_joint" joint="right_leg_pelvic_roll_joint"/>
+    <motor name="right_leg_pelvic_yaw_joint" joint="right_leg_pelvic_yaw_joint"/>
+    <motor name="right_leg_knee_pitch_joint" joint="right_leg_knee_pitch_joint"/>
+    <motor name="right_leg_ankle_pitch_joint" joint="right_leg_ankle_pitch_joint"/>
+    <motor name="right_leg_ankle_roll_joint" joint="right_leg_ankle_roll_joint"/>
+    <motor name="waist_yaw_joint" joint="waist_yaw_joint"/>
+    <motor name="head_yaw_joint" joint="head_yaw_joint"/>
+    <motor name="head_pitch_joint" joint="head_pitch_joint"/>
+    <motor name="left_shoulder_pitch_joint" joint="left_shoulder_pitch_joint"/>
+    <motor name="left_shoulder_roll_joint" joint="left_shoulder_roll_joint"/>
+    <motor name="left_shoulder_yaw_joint" joint="left_shoulder_yaw_joint"/>
+    <motor name="left_elbow_pitch_joint" joint="left_elbow_pitch_joint"/>
+    <motor name="left_wrist_yaw_joint" joint="left_wrist_yaw_joint"/>
+    <motor name="right_shoulder_pitch_joint" joint="right_shoulder_pitch_joint"/>
+    <motor name="right_shoulder_roll_joint" joint="right_shoulder_roll_joint"/>
+    <motor name="right_shoulder_yaw_joint" joint="right_shoulder_yaw_joint"/>
+    <motor name="right_elbow_pitch_joint" joint="right_elbow_pitch_joint"/>
+    <motor name="right_wrist_yaw_joint" joint="right_wrist_yaw_joint"/>
+  </actuator>
 
   <sensor>
     <gyro name="imu_ang_vel" site="imu"/>

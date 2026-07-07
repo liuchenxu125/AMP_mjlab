@@ -9,9 +9,16 @@ Usage:
 Supports any robot registered in src/assets/robots/ (g1, casbot_skeleton, marathon_001).
 """
 
+import sys
+from pathlib import Path
+
+# Ensure our project's src is found before any conflicting packages
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 import argparse
 import time
-from pathlib import Path
 
 import mujoco
 import mujoco.viewer
@@ -28,6 +35,7 @@ ROBOT_XML = {
     "g1_23dof": SRC_PATH / "assets" / "robots" / "unitree_g1" / "xmls" / "g1_23dof.xml",
     "casbot_skeleton": SRC_PATH / "assets" / "robots" / "casbot_skeleton" / "xmls" / "casbot_skeleton_25dof.xml",
     "marathon_001": SRC_PATH / "assets" / "robots" / "marathon_001" / "xmls" / "marathon_001.xml",
+    "casbot_02_7dof": SRC_PATH / "assets" / "robots" / "casbot_02_7dof" / "xmls" / "casbot_02_7dof.xml",
 }
 
 # Joint names for each robot, in the order they appear in NPZ joint_pos columns.
@@ -74,6 +82,17 @@ ROBOT_JOINT_NAMES = {
         "left_leg_pelvic_pitch_joint", "left_leg_pelvic_roll_joint", "left_leg_pelvic_yaw_joint",
         "left_leg_knee_pitch_joint", "left_leg_ankle_pitch_joint", "left_leg_ankle_roll_joint",
     ],
+    "casbot_02_7dof": [
+        "left_leg_pelvic_pitch_joint", "left_leg_pelvic_roll_joint", "left_leg_pelvic_yaw_joint",
+        "left_leg_knee_pitch_joint", "left_leg_ankle_pitch_joint", "left_leg_ankle_roll_joint",
+        "right_leg_pelvic_pitch_joint", "right_leg_pelvic_roll_joint", "right_leg_pelvic_yaw_joint",
+        "right_leg_knee_pitch_joint", "right_leg_ankle_pitch_joint", "right_leg_ankle_roll_joint",
+        "waist_yaw_joint", "head_yaw_joint", "head_pitch_joint",
+        "left_shoulder_pitch_joint", "left_shoulder_roll_joint", "left_shoulder_yaw_joint",
+        "left_elbow_pitch_joint", "left_wrist_yaw_joint", "left_wrist_pitch_joint", "left_wrist_roll_joint",
+        "right_shoulder_pitch_joint", "right_shoulder_roll_joint", "right_shoulder_yaw_joint",
+        "right_elbow_pitch_joint", "right_wrist_yaw_joint", "right_wrist_pitch_joint", "right_wrist_roll_joint",
+    ],
 }
 
 
@@ -117,6 +136,8 @@ def main():
     parser.add_argument("--xml", help="Custom robot XML path (overrides --robot)")
     parser.add_argument("--base-height", type=float, default=0.0,
                         help="Vertical offset added to root position (meters)")
+    parser.add_argument("--fix-camera", action="store_true",
+                        help="Fix camera to a stationary side view (no tracking)")
     args = parser.parse_args()
 
     # ── Load motion ──────────────────────────────────────────────────────
@@ -154,6 +175,12 @@ def main():
     print("Viewer opened — close window to exit.")
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
+        if args.fix_camera:
+            # Lock free camera to a fixed viewpoint
+            viewer.cam.lookat[:] = (0.0, 0.0, 0.5)
+            viewer.cam.distance = 3.5
+            viewer.cam.azimuth = 80
+            viewer.cam.elevation = -15
         frame_idx = 0
         last_update = time.time()
 

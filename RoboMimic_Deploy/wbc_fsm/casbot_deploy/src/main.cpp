@@ -180,10 +180,10 @@ int main(int argc, char **argv)
     std::cout << "[Main] Scene:  " << scenePath  << "\n"
               << "[Main] Config: " << configPath << std::endl;
 
-    // ── Simulation parameters ──
-    const double simDt     = 0.003;
-    const int    ctrlDecim = 7;           // policy ~48 Hz
-    const double ctrlDt    = simDt * ctrlDecim;
+    // ── Simulation parameters (same as Python deploy_casbot.py) ──
+    const double simDt     = 0.002;       // 500 Hz physics
+    const int    ctrlDecim = 10;          // policy @ 50 Hz (500Hz / 10)
+    const double ctrlDt    = simDt * ctrlDecim;  // 0.020s
 
     // ── Load MuJoCo model ──
     char error[1000] = "";
@@ -233,7 +233,7 @@ int main(int argc, char **argv)
     glfwSetMouseButtonCallback(g_window, mouseButtonCallback);
     glfwSetCursorPosCallback(g_window, cursorPosCallback);
     glfwSetScrollCallback(g_window, scrollCallback);
-    glfwSwapInterval(1);
+    glfwSwapInterval(0);  // 关闭垂直同步, 物理必须以333Hz全速运行
 
     // ── Init MuJoCo visualization ──
     mjv_defaultCamera(&g_cam);

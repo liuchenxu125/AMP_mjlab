@@ -3,7 +3,7 @@
 # Same framework and parameters as MJAMP (G1), adapted for 25-joint casbot.
 
 # ONNX model (relative to this config file)
-onnx_path: "../../casbot_skeleton/policy.onnx"
+onnx_path: "../../casbot_skeleton/policy_0623_zoulu.onnx"
 
 # Observation configuration
 num_actions: 25

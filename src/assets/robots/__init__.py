@@ -25,3 +25,12 @@ from .marathon_001.marathon_001_constants import (
 from .marathon_001.marathon_001_constants import (
   get_marathon_robot_cfg as get_marathon_robot_cfg,
 )
+
+from .casbot_02_7dof.casbot_02_7dof_constants import (
+  CASBOT_02_7DOF_ACTION_SCALE as CASBOT_02_7DOF_ACTION_SCALE,
+  CASBOT_02_7DOF_JOINT_NAMES as CASBOT_02_7DOF_JOINT_NAMES,
+)
+from .casbot_02_7dof.casbot_02_7dof_constants import (
+  get_casbot_02_7dof_robot_cfg as get_casbot_02_7dof_robot_cfg,
+ 
+)
