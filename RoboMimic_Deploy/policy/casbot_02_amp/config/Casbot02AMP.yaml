@@ -2,7 +2,7 @@
 # Casbot 02 7DOF (29-DOF) locomotion policy trained with MJLAB AMP framework.
 
 # ONNX model (relative to this config file)
-onnx_path: "../../casbot_02_7dof/policy.onnx"
+onnx_path: "../../casbot_02_7dof/Casbot-02-7dof-AMP-Flat_model_10000.onnx"
 
 # Observation configuration
 num_actions: 29

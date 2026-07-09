@@ -54,8 +54,8 @@ if __name__ == "__main__":
     print(f"[Deploy] Loading model: {xml_path}")
 
     # ── Simulation parameters ──
-    simulation_dt = 0.003
-    control_decimation = 7  # policy runs at ~48 Hz
+    simulation_dt = 0.002
+    control_decimation = 10  # policy runs at ~48 Hz
 
     # ── Load MuJoCo model ──
     m = mujoco.MjModel.from_xml_path(xml_path)
