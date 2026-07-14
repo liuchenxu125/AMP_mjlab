@@ -1,0 +1,305 @@
+"""CASBOT02 23DOF constants."""
+
+from pathlib import Path
+
+import mujoco
+
+from mjlab.actuator import BuiltinPositionActuatorCfg, DelayedActuatorCfg
+from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
+from mjlab.utils.os import update_assets
+
+from src import SRC_PATH
+
+##
+# MJCF and assets.
+##
+
+CASBOT02_23DOF_XML: Path = (
+  SRC_PATH.parent / "CASBOT02_7dof" / "xml" / "CASBOT_02_23dof.xml"
+)
+assert CASBOT02_23DOF_XML.exists(), CASBOT02_23DOF_XML
+
+CASBOT02_23DOF_JOINT_NAMES: tuple[str, ...] = (
+  "leg_l1_joint",
+  "leg_l2_joint",
+  "leg_l3_joint",
+  "leg_l4_joint",
+  "leg_l5_joint",
+  "leg_l6_joint",
+  "leg_r1_joint",
+  "leg_r2_joint",
+  "leg_r3_joint",
+  "leg_r4_joint",
+  "leg_r5_joint",
+  "leg_r6_joint",
+  "waist_yaw_joint",
+  "upper_left_1_joint",
+  "upper_left_2_joint",
+  "upper_left_3_joint",
+  "upper_left_4_joint",
+  "upper_left_5_joint",
+  "upper_right_1_joint",
+  "upper_right_2_joint",
+  "upper_right_3_joint",
+  "upper_right_4_joint",
+  "upper_right_5_joint",
+)
+
+CASBOT02_MOTOR_COMM_DELAY_MIN_LAG = 0
+CASBOT02_MOTOR_COMM_DELAY_MAX_LAG = 2
+CASBOT02_MOTOR_COMM_DELAY_UPDATE_PERIOD = 4
+CASBOT02_MOTOR_COMM_DELAY_HOLD_PROB = 0.5
+
+CASBOT02_23DOF_AMP_BODY_NAMES: tuple[str, ...] = (
+  "torso",
+  "leg_l2_link",
+  "leg_l4_link",
+  "leg_l6_link",
+  "leg_r2_link",
+  "leg_r4_link",
+  "leg_r6_link",
+  "left_shoulder_roll_link",
+  "left_elbow_pitch_link",
+  "left_wrist_yaw_link",
+  "right_shoulder_roll_link",
+  "right_elbow_pitch_link",
+  "right_wrist_yaw_link",
+)
+
+CASBOT02_LEG_AMP_BODY_NAMES: tuple[str, ...] = (
+  "torso",
+  "leg_l2_link",
+  "leg_l4_link",
+  "leg_l6_link",
+  "leg_r2_link",
+  "leg_r4_link",
+  "leg_r6_link",
+  "waist_yaw_link",
+)
+
+CASBOT02_LEG_JOINT_NAMES: tuple[str, ...] = (
+  "leg_l1_joint",
+  "leg_l2_joint",
+  "leg_l3_joint",
+  "leg_l4_joint",
+  "leg_l5_joint",
+  "leg_l6_joint",
+  "leg_r1_joint",
+  "leg_r2_joint",
+  "leg_r3_joint",
+  "leg_r4_joint",
+  "leg_r5_joint",
+  "leg_r6_joint",
+  "waist_yaw_joint",
+)
+
+
+def get_assets(meshdir: str) -> dict[str, bytes]:
+  assets: dict[str, bytes] = {}
+  update_assets(
+    assets,
+    (CASBOT02_23DOF_XML.parent / meshdir).resolve(),
+    meshdir.rstrip("/"),
+  )
+  return assets
+
+
+def get_spec() -> mujoco.MjSpec:
+  spec = mujoco.MjSpec.from_file(str(CASBOT02_23DOF_XML))
+  spec.assets = get_assets(spec.meshdir)
+
+  # The source XML is a standalone MuJoCo scene. In mjlab the terrain is provided
+  # by SceneCfg, so keep only the robot body tree from the XML.
+  for geom in list(spec.geoms):
+    if geom.name == "ground":
+      spec.delete(geom)
+
+  # Replace XML torque motors with mjlab position actuators below. This keeps the
+  # action semantics consistent with JointPositionActionCfg.
+  for act in list(spec.actuators):
+    spec.delete(act)
+
+  return spec
+
+
+##
+# Actuator config.
+##
+
+NATURAL_FREQ = 10.0 * 2.0 * 3.1415926535
+DAMPING_RATIO = 2.0
+
+
+def _stiffness(armature: float) -> float:
+  return armature * NATURAL_FREQ**2
+
+
+def _damping(armature: float) -> float:
+  return 2.0 * DAMPING_RATIO * armature * NATURAL_FREQ
+
+
+def _with_motor_comm_delay(
+  base_cfg: BuiltinPositionActuatorCfg,
+) -> DelayedActuatorCfg:
+  # 第15次修改: CASBOT02 关节 position target 加 0-10ms 电机通讯延迟。
+  return DelayedActuatorCfg(
+    base_cfg=base_cfg,
+    delay_target="position",
+    delay_min_lag=CASBOT02_MOTOR_COMM_DELAY_MIN_LAG,
+    delay_max_lag=CASBOT02_MOTOR_COMM_DELAY_MAX_LAG,
+    delay_hold_prob=CASBOT02_MOTOR_COMM_DELAY_HOLD_PROB,
+    delay_update_period=CASBOT02_MOTOR_COMM_DELAY_UPDATE_PERIOD,
+    delay_per_env_phase=True,
+  )
+
+
+CASBOT02_LEG_HEAVY_ACTUATOR = BuiltinPositionActuatorCfg(
+  target_names_expr=(
+    "leg_l1_joint",
+    "leg_l2_joint",
+    "leg_l4_joint",
+    "leg_r1_joint",
+    "leg_r2_joint",
+    "leg_r4_joint",
+  ),
+  stiffness=_stiffness(0.07),
+  damping=_damping(0.07),
+  effort_limit=120.0,
+  armature=0.07,
+  frictionloss=0.01,
+)
+
+CASBOT02_LEG_LIGHT_ACTUATOR = BuiltinPositionActuatorCfg(
+  target_names_expr=(
+    "leg_l3_joint",
+    "leg_l5_joint",
+    "leg_l6_joint",
+    "leg_r3_joint",
+    "leg_r5_joint",
+    "leg_r6_joint",
+  ),
+  stiffness=_stiffness(0.029),#原值0.039
+  damping=_damping(0.029),
+  effort_limit=80.0,
+  armature=0.029,
+  frictionloss=0.01,
+)
+
+CASBOT02_WAIST_YAW_ACTUATOR = BuiltinPositionActuatorCfg(
+  target_names_expr=("waist_yaw_joint",),
+  stiffness=_stiffness(0.0245),
+  damping=_damping(0.0245),
+  effort_limit=60.0,
+  armature=0.0245,
+  frictionloss=0.01,
+)
+
+CASBOT02_ARM_HEAVY_ACTUATOR = BuiltinPositionActuatorCfg(
+  target_names_expr=(
+    "upper_left_1_joint",
+    "upper_left_2_joint",
+    "upper_left_4_joint",
+    "upper_right_1_joint",
+    "upper_right_2_joint",
+    "upper_right_4_joint",
+  ),
+  stiffness=_stiffness(0.033),
+  damping=_damping(0.033),
+  effort_limit=40.0,
+  armature=0.033,
+  frictionloss=0.01,
+)
+
+CASBOT02_ARM_LIGHT_ACTUATOR = BuiltinPositionActuatorCfg(
+  target_names_expr=(
+    "upper_left_3_joint",
+    "upper_left_5_joint",
+    "upper_right_3_joint",
+    "upper_right_5_joint",
+  ),
+  stiffness=_stiffness(0.0245),
+  damping=_damping(0.0245),
+  effort_limit=30.0,
+  armature=0.0245,
+  frictionloss=0.01,
+)
+
+##
+# Keyframe config.
+##
+
+HOME_KEYFRAME = EntityCfg.InitialStateCfg(
+  pos=(0.0, 0.0, 0.92),
+  joint_pos={
+    "leg_l1_joint": -0.185,
+    "leg_l2_joint": 0.0,
+    "leg_l3_joint": 0.0,
+    "leg_l4_joint": 0.36,
+    "leg_l5_joint": -0.175,
+    "leg_l6_joint": 0.0,
+    "leg_r1_joint": -0.185,
+    "leg_r2_joint": 0.0,
+    "leg_r3_joint": 0.0,
+    "leg_r4_joint": 0.36,
+    "leg_r5_joint": -0.175,
+    "leg_r6_joint": 0.0,
+    "waist_yaw_joint": 0.0,
+    "upper_left_1_joint": 0.2,
+    "upper_left_2_joint": 0.2,
+    "upper_left_3_joint": 0.0,
+    "upper_left_4_joint": -0.35,
+    "upper_left_5_joint": 0.0,
+    "upper_right_1_joint": 0.2,
+    "upper_right_2_joint": -0.2,
+    "upper_right_3_joint": 0.0,
+    "upper_right_4_joint": -0.35,
+    "upper_right_5_joint": 0.0,
+  },
+  joint_vel={".*": 0.0},
+)
+
+##
+# Final config.
+##
+
+CASBOT02_23DOF_ARTICULATION = EntityArticulationInfoCfg(
+  actuators=(
+    _with_motor_comm_delay(CASBOT02_LEG_HEAVY_ACTUATOR),
+    _with_motor_comm_delay(CASBOT02_LEG_LIGHT_ACTUATOR),
+    _with_motor_comm_delay(CASBOT02_WAIST_YAW_ACTUATOR),
+    _with_motor_comm_delay(CASBOT02_ARM_HEAVY_ACTUATOR),
+    _with_motor_comm_delay(CASBOT02_ARM_LIGHT_ACTUATOR),
+  ),
+  soft_joint_pos_limit_factor=0.9,
+)
+
+
+def get_casbot02_23dof_robot_cfg() -> EntityCfg:
+  """Get a fresh CASBOT02 23DOF robot configuration instance."""
+  return EntityCfg(
+    init_state=HOME_KEYFRAME,
+    spec_fn=get_spec,
+    articulation=CASBOT02_23DOF_ARTICULATION,
+    sort_actuators=True,
+  )
+
+
+CASBOT02_23DOF_ACTION_SCALE: dict[str, float] = {}
+for a in CASBOT02_23DOF_ARTICULATION.actuators:
+  base = a.base_cfg if isinstance(a, DelayedActuatorCfg) else a
+  assert isinstance(base, BuiltinPositionActuatorCfg)
+  e = base.effort_limit
+  s = base.stiffness
+  assert e is not None
+  for n in base.target_names_expr:
+    CASBOT02_23DOF_ACTION_SCALE[n] = 0.25 * e / s
+
+
+if __name__ == "__main__":
+  import mujoco.viewer as viewer
+
+  from mjlab.entity.entity import Entity
+
+  robot = Entity(get_casbot02_23dof_robot_cfg())
+
+  viewer.launch(robot.spec.compile())
