@@ -35,6 +35,20 @@ def phase(
   return phase
 
 
+def last_action_slice(
+    env: ManagerBasedRlEnv,
+    start: int = 0,
+    stop: int | None = None,
+    action_name: str | None = None,
+) -> torch.Tensor:
+  action = (
+    env.action_manager.action
+    if action_name is None
+    else env.action_manager.get_term(action_name).raw_action
+  )
+  return action[:, start:stop]
+
+
 def robot_body_pos_b(
     env: ManagerBasedRlEnv,
     anchor_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names=()),
