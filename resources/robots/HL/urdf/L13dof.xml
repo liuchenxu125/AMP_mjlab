@@ -1,0 +1,256 @@
+<mujoco model="L13dof">
+  <compiler angle="radian" meshdir="../meshes_L1_fb/" />
+  <option timestep="0.001" />
+
+  <visual>
+    <map force="0.1" zfar="30" />
+    <rgba haze="0.15 0.25 0.35 1" />
+    <global offwidth="2560" offheight="1440" elevation="-20" azimuth="120" />
+  </visual>
+
+  <statistic center="0 0 0.7" />
+  <compiler angle="radian" autolimits="true" />
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1=".3 .5 .7" rgb2="0 0 0" width="32" height="512" />
+    <texture name="body" type="cube" builtin="flat" mark="cross" width="128" height="128"
+      rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" markrgb="1 1 1" random="0.01" />
+    <material name="body" texture="body" texuniform="true" rgba="0.8 0.6 .4 1" />
+    <texture name="grid" type="2d" builtin="checker" width="512" height="512" rgb1=".1 .2 .3"
+      rgb2=".2 .3 .4" />
+    <material name="grid" texture="grid" texrepeat="1 1" texuniform="true" reflectance=".2" />
+  </asset>
+
+  <asset>
+    <mesh name="base_link" file="base_link.STL"/>
+    <mesh name="SL1" file="SL1.STL"/>
+    <mesh name="SL2" file="SL2.STL"/>
+    <mesh name="SL3" file="SL3.STL"/>
+    <mesh name="SL4" file="SL4.STL"/>
+    <mesh name="LL5" file="LL5.STL"/>
+    <mesh name="LL6" file="LL6.STL"/>
+    <mesh name="SR1" file="SR1.STL"/>
+    <mesh name="SR2" file="SR2.STL"/>
+    <mesh name="SR3" file="SR3.STL"/>
+    <mesh name="SR4" file="SR4.STL"/>
+    <mesh name="LR5" file="LR5.STL"/>
+    <mesh name="LR6" file="LR6.STL"/>
+  </asset>
+  <worldbody>
+    <light directional="true" diffuse=".4 .4 .4" specular="0.1 0.1 0.1" pos="0 0 5.0" dir="0 0 -1" castshadow="false"/>
+    <light directional="true" diffuse=".6 .6 .6" specular="0.2 0.2 0.2" pos="0 0 4" dir="0 0 -1"/>
+    <geom name="floor" size="0 0 .05" type="plane" material="grid" condim="3" contype="3" conaffinity="3" solref="0.0002 0.1"/>
+    <!-- <light name="spotlight" mode="targetbodycom" target="base_link" diffuse=".8 .8 .8" specular="0.3 0.3 0.3" pos="0 -6 4" cutoff="30"/> -->
+
+    <body name="base_link" pos="0 0 1.1">
+      <!-- <geom type="mesh" mesh="base_link" group="1" class="visualgeom" /> -->
+
+      <inertial pos="-0.00115901 -0.00010211 0.129233" quat="0.998717 0.000438195 0.0506161 -0.00167154" mass="17.1319" diaginertia="0.705751 0.599018 0.159996"/>
+      <light name="top" pos="0 0 2" mode="trackcom" />
+      <camera name="back" pos="-3 0 1" xyaxes="0 -1 0 1 0 2" mode="trackcom" />
+      <camera name="side" pos="0 -3 1" xyaxes="1 0 0 0 1 2" mode="trackcom" />
+      <freejoint name="root" />
+      <geom type="mesh" rgba="0.898039 0.917647 0.929412 1" mesh="base_link" contype="0"
+        conaffinity="0" solimp=".9 .99 .003" />
+      <!-- <geom size="0.0001 0.0001 0.0001" type="box" pos="-0.1 0 0.4" rgba="0.6 0.5 0.7 1" contype="3"
+        conaffinity="3" solimp=".9 .99 .003" /> -->
+      <!-- <geom size="0.05 0.1 0.125" type="box" rgba="0.6 0.5 0.7 1" contype="3" conaffinity="3"
+      solimp=".9 .99 .003"/> -->
+      <site name='imu' size='0.01' pos='0.0 0 0.0' />
+      <body name="left_arm_link1" pos="-0.004 0.2134 0.2855">
+        <inertial pos="-0.00071452 0.044067 -0.00025689" quat="0.485063 0.505156 -0.547127 0.458458" mass="0.7773" diaginertia="0.000516413 0.000502724 0.000470083"/>
+        <joint name="left_arm_joint1" pos="0 0 0" axis="0 1 0" range="-3.14 0.96" limited="true"/>
+        <geom type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SL1"/>
+        <body name="left_arm_link2" pos="0 0.0464 0">
+          <inertial pos="-0.000314475 0.00026743 -0.110466" quat="0.789737 0.0302369 0.0504519 0.610619" mass="1.25533" diaginertia="0.00490822 0.00483217 0.000947123"/>
+          <joint name="left_arm_joint2" pos="0 0 0" axis="1 0 0" range="0 3.04" limited="true"/>
+          <geom type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SL2"/>
+          <geom pos="0 0 -0.0536" type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SL3"/>
+          <body name="left_arm_link3" pos="0 0 -0.28">
+            <inertial pos="2.271e-05 -0.00263053 -0.0531358" quat="0.999989 0.00477335 5.29756e-05 -0.000418637" mass="1.02283" diaginertia="0.0111721 0.011112 0.0005832"/>
+            <joint name="left_arm_joint3" pos="0 0 0" axis="0 1 0" range="-2.62 1.656" limited="true"/>
+            <geom type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SL4"/>
+          </body>
+        </body>
+      </body>
+      <body name="leg_l1_link" pos="0 0.090386 -0.091358">
+        <inertial pos="0.0040227 0.022926 -0.032741" quat="0.189769 0.681166 0.449136 0.546148" mass="0.33758" diaginertia="0.0010967 0.00076856 0.000568251"/>
+        <joint name="leg_l1_joint" pos="0 0 0" axis="0 -0.57358 0.81915" range="-1.815 1.728" limited="true"/>
+        <body name="leg_l2_link" pos="0 0.049614 -0.070857">
+          <inertial pos="0.0063923 9.576e-05 -0.0033657" quat="0.9972 0.00211177 0.0747492 -0.00022736" mass="2.0598" diaginertia="0.0033249 0.00275551 0.00234859"/>
+          <joint name="leg_l2_joint" pos="0 0 0" axis="1 0 0" range="-1.134 1.309" limited="true"/>
+          <body name="leg_l3_link" pos="0 0 -0.075">
+            <inertial pos="0.00302429 0.00846589 -0.127734" quat="0.939571 -0.00709148 -0.0359986 0.340383" mass="5.34674" diaginertia="0.0595886 0.0589714 0.0102521"/>
+            <joint name="leg_l3_joint" pos="0 0 0" axis="0 0 1" range="-1.396 1.396" limited="true"/>
+            <geom size="0.025 0.025 0.125" pos="0 0 -0.18" type="box" rgba="0.75294 0.75294 0.75294 1"/>
+            <body name="leg_l4_link" pos="0 0 -0.375">
+              <inertial pos="-0.00054298 -5.372e-05 -0.159495" quat="0.762608 0.00275954 0.00364869 0.646844" mass="2.64088" diaginertia="0.0335491 0.0330326 0.00261633"/>
+              <joint name="leg_l4_joint" pos="0 0 0" axis="0 1 0" range="0 2.443" limited="true"/>
+              <geom size="0.025 0.025 0.125" pos="0 0 -0.2" type="box" rgba="0.75294 0.75294 0.75294 1"/>
+              <body name="leg_l5_link" pos="0 0 -0.4">
+                <inertial pos="0 0 0" quat="0.707107 0.707107 0 0" mass="0.0349403" diaginertia="5.53e-06 3.98e-06 3.79e-06"/>
+                <joint name="leg_l5_joint" pos="0 0 0" axis="0 1 0" range="-1.047 0.523" limited="true"/>
+                <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="LL5"/>
+                <body name="leg_l6_link">
+                  <inertial pos="0.0117187 0 -0.0463114" quat="-1.30199e-06 0.722937 1.24432e-06 0.690914" mass="0.789063" diaginertia="0.00397665 0.00361695 0.000843517"/>
+                  <joint name="leg_l6_joint" pos="0 0 0" axis="1 0 0" range="-0.611 0.611" limited="true"/>
+                  <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="LL6" />
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="right_arm_link1" pos="-0.004 -0.2134 0.28554">
+        <inertial pos="-0.00071452 -0.044067 0.00025689" quat="0.458458 0.547127 -0.505156 0.485063" mass="0.7773" diaginertia="0.000516413 0.000502724 0.000470083"/>
+        <joint name="right_arm_joint1" pos="0 0 0" axis="0 1 0" range="-3.14 0.96" limited="true"/>
+        <geom type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SR1"/>
+        <body name="right_arm_link2" pos="0 -0.0464 0">
+          <inertial pos="-0.000314412 0.00026743 -0.110504" quat="0.789699 0.0302404 0.0504505 0.610669" mass="1.25532" diaginertia="0.00490823 0.00483214 0.000947123"/>
+          <joint name="right_arm_joint2" pos="0 0 0" axis="1 0 0" range="-3.04 0" limited="true"/>
+          <geom type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SR2"/>
+          <geom pos="0 0 -0.0536" type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SR3"/>
+          <body name="right_arm_link3" pos="0 0 -0.280038">
+            <inertial pos="2.271e-05 -0.0026305 -0.053136" quat="0.999989 0.00477337 5.29762e-05 -0.000418707" mass="1.0228" diaginertia="0.011172 0.011112 0.0005832"/>
+            <joint name="right_arm_joint3" pos="0 0 0" axis="0 1 0" range="-2.62 1.656" limited="true"/>
+            <geom type="mesh" rgba="0.86667 0.86667 0.8902 1" mesh="SR4"/>
+          </body>
+        </body>
+      </body>
+      <body name="leg_r1_link" pos="0 -0.090386 -0.091358">
+        <inertial pos="0.0039037 -0.023102 -0.032993" quat="0.54201 0.454129 0.682864 0.183546" mass="0.34441" diaginertia="0.0011246 0.00079329 0.000573668"/>
+        <joint name="leg_r1_joint" pos="0 0 0" axis="0 0.57358 0.81915" range="-1.728 1.815" limited="true"/>
+        <body name="leg_r2_link" pos="0 -0.049614 -0.070857">
+          <inertial pos="0.0063923 9.576e-05 -0.0033657" quat="0.9972 0.00211177 0.0747492 -0.00022736" mass="2.0598" diaginertia="0.0033249 0.00275551 0.00234859"/>
+          <joint name="leg_r2_joint" pos="0 0 0" axis="1 0 0" range="-1.309 1.134" limited="true"/>
+          <body name="leg_r3_link" pos="0 0 -0.075">
+            <inertial pos="0.0039763 -0.0086064 -0.12813" quat="0.940155 0.00473449 -0.0335943 -0.339053" mass="5.4051" diaginertia="0.0607774 0.0601185 0.0104191"/>
+            <joint name="leg_r3_joint" pos="0 0 0" axis="0 0 1" range="-1.396 1.396" limited="true"/>
+            <geom size="0.025 0.025 0.125" pos="0 0 -0.18" type="box" rgba="0.75294 0.75294 0.75294 1"/>
+            <body name="leg_r4_link" pos="0 0 -0.375">
+              <inertial pos="-0.00074804 4.31e-06 -0.15794" quat="0.653717 0.00589704 0.00313472 0.75671" mass="2.6406" diaginertia="0.0320165 0.0313896 0.00273187"/>
+              <joint name="leg_r4_joint" pos="0 0 0" axis="0 1 0" range="0 2.443" limited="true"/>
+              <geom size="0.025 0.025 0.125" pos="0 0 -0.2" type="box" rgba="0.75294 0.75294 0.75294 1"/>
+              <body name="leg_r5_link" pos="0 0 -0.4">
+                <inertial pos="0 0 0" quat="0.707107 0.707107 0 0" mass="0.03494" diaginertia="5.53e-06 3.98e-06 3.79e-06"/>
+                <joint name="leg_r5_joint" pos="0 0 0" axis="0 1 0" range="-1.047 0.523" limited="true"/>
+                <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="LR5"/>
+                <body name="leg_r6_link">
+                  <inertial pos="0.011719 0 -0.046311" quat="-1.30197e-06 0.722937 1.2443e-06 0.690914" mass="0.78906" diaginertia="0.00397662 0.003617 0.000843517"/>
+                  <joint name="leg_r6_joint" pos="0 0 0" axis="1 0 0" range="-0.611 0.611" limited="true"/>
+                  <geom type="mesh" rgba="0.75294 0.75294 0.75294 1" mesh="LR6" />
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor name="left_arm_joint1" joint="left_arm_joint1" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="left_arm_joint2" joint="left_arm_joint2" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="left_arm_joint3" joint="left_arm_joint3" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_l1_joint" joint="leg_l1_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_l2_joint" joint="leg_l2_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_l3_joint" joint="leg_l3_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_l4_joint" joint="leg_l4_joint" gear="1" ctrllimited="true" 
+      ctrlrange="-200 200" />
+    <motor name="leg_l5_joint" joint="leg_l5_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_l6_joint" joint="leg_l6_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="right_arm_joint1" joint="right_arm_joint1" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="right_arm_joint2" joint="right_arm_joint2" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="right_arm_joint3" joint="right_arm_joint3" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_r1_joint" joint="leg_r1_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_r2_joint" joint="leg_r2_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_r3_joint" joint="leg_r3_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_r4_joint" joint="leg_r4_joint" gear="1" ctrllimited="true" 
+      ctrlrange="-200 200" />
+    <motor name="leg_r5_joint" joint="leg_r5_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+    <motor name="leg_r6_joint" joint="leg_r6_joint" gear="1" ctrllimited="true"
+      ctrlrange="-200 200" />
+  </actuator>
+
+  <sensor>
+    <actuatorpos name='left_arm_joint1_p' actuator='left_arm_joint1' user='13' />
+    <actuatorpos name='left_arm_joint2_p' actuator='left_arm_joint2' user='13' />
+    <actuatorpos name='left_arm_joint3_p' actuator='left_arm_joint3' user='13' />
+    <actuatorpos name='leg_l1_joint_p' actuator='leg_l1_joint' user='13' />
+    <actuatorpos name='leg_l2_joint_p' actuator='leg_l2_joint' user='13' />
+    <actuatorpos name='leg_l3_joint_p' actuator='leg_l3_joint' user='13' />
+    <actuatorpos name='leg_l4_joint_p' actuator='leg_l4_joint' user='13' />
+    <actuatorpos name='leg_l5_joint_p' actuator='leg_l5_joint' user='13' />
+    <actuatorpos name='leg_l6_joint_p' actuator='leg_l6_joint' user='13' />
+    <actuatorpos name='right_arm_joint1_p' actuator='right_arm_joint1' user='13' />
+    <actuatorpos name='right_arm_joint2_p' actuator='right_arm_joint2' user='13' />
+    <actuatorpos name='right_arm_joint3_p' actuator='right_arm_joint3' user='13' />
+    <actuatorpos name='leg_r1_joint_p' actuator='leg_r1_joint' user='13' />
+    <actuatorpos name='leg_r2_joint_p' actuator='leg_r2_joint' user='13' />
+    <actuatorpos name='leg_r3_joint_p' actuator='leg_r3_joint' user='13' />
+    <actuatorpos name='leg_r4_joint_p' actuator='leg_r4_joint' user='13' />
+    <actuatorpos name='leg_r5_joint_p' actuator='leg_r5_joint' user='13' />
+    <actuatorpos name='leg_r6_joint_p' actuator='leg_r6_joint' user='13' />
+
+    <actuatorpos name='left_arm_joint1_v' actuator='left_arm_joint1' user='13' />
+    <actuatorpos name='left_arm_joint2_v' actuator='left_arm_joint2' user='13' />
+    <actuatorpos name='left_arm_joint3_v' actuator='left_arm_joint3' user='13' />
+    <actuatorvel name='leg_l1_joint_v' actuator='leg_l1_joint' user='13' />
+    <actuatorvel name='leg_l2_joint_v' actuator='leg_l2_joint' user='13' />
+    <actuatorvel name='leg_l3_joint_v' actuator='leg_l3_joint' user='13' />
+    <actuatorvel name='leg_l4_joint_v' actuator='leg_l4_joint' user='13' />
+    <actuatorvel name='leg_l5_joint_v' actuator='leg_l5_joint' user='13' />
+    <actuatorvel name='leg_l6_joint_v' actuator='leg_l6_joint' user='13' />
+    <actuatorpos name='right_arm_joint1_v' actuator='right_arm_joint1' user='13' />
+    <actuatorpos name='right_arm_joint2_v' actuator='right_arm_joint2' user='13' />
+    <actuatorpos name='right_arm_joint3_v' actuator='right_arm_joint3' user='13' />
+    <actuatorvel name='leg_r1_joint_v' actuator='leg_r1_joint' user='13' />
+    <actuatorvel name='leg_r2_joint_v' actuator='leg_r2_joint' user='13' />
+    <actuatorvel name='leg_r3_joint_v' actuator='leg_r3_joint' user='13' />
+    <actuatorpos name='leg_r4_joint_v' actuator='leg_r4_joint' user='13' />
+    <actuatorvel name='leg_r5_joint_v' actuator='leg_r5_joint' user='13' />
+    <actuatorvel name='leg_r6_joint_v' actuator='leg_r6_joint' user='13' />
+
+    <actuatorpos name='left_arm_joint1_f' actuator='left_arm_joint1' user='13' noise='1e-3' />
+    <actuatorpos name='left_arm_joint2_f' actuator='left_arm_joint2' user='13' noise='1e-3' />
+    <actuatorpos name='left_arm_joint3_f' actuator='left_arm_joint3' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_l1_joint_f' actuator='leg_l1_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_l2_joint_f' actuator='leg_l2_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_l3_joint_f' actuator='leg_l3_joint' user='13' />
+    <actuatorfrc name='leg_l4_joint_f' actuator='leg_l4_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_l5_joint_f' actuator='leg_l5_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_l6_joint_f' actuator='leg_l6_joint' user='13' noise='1e-3' />
+    <actuatorpos name='right_arm_joint1_f' actuator='right_arm_joint1' user='13' noise='1e-3' />
+    <actuatorpos name='right_arm_joint2_f' actuator='right_arm_joint2' user='13' noise='1e-3' />
+    <actuatorpos name='right_arm_joint3_f' actuator='right_arm_joint3' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_r1_joint_f' actuator='leg_r1_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_r2_joint_f' actuator='leg_r2_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_r3_joint_f' actuator='leg_r3_joint' user='13' />
+    <actuatorpos name='leg_r4_joint_f' actuator='leg_r4_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_r5_joint_f' actuator='leg_r5_joint' user='13' noise='1e-3' />
+    <actuatorfrc name='leg_r6_joint_f' actuator='leg_r6_joint' user='13' noise='1e-3' />
+
+
+    <framequat name='orientation' objtype='site' noise='0.001' objname='imu' />
+    <framepos name='position' objtype='site' noise='0.001' objname='imu' />
+    <gyro name='angular-velocity' site='imu' noise='0.005' cutoff='34.9' />
+    <velocimeter name='linear-velocity' site='imu' noise='0.001' cutoff='30' />
+    <accelerometer name='linear-acceleration' site='imu' noise='0.005' cutoff='157' />
+    <magnetometer name='magnetometer' site='imu' />
+
+  </sensor>
+</mujoco>

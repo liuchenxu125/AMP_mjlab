@@ -1,0 +1,400 @@
+import math
+import numpy as np
+import mujoco, mujoco_viewer
+from tqdm import tqdm
+from collections import deque
+from scipy.spatial.transform import Rotation as R
+from humanoid import LEGGED_GYM_ROOT_DIR
+# from humanoid.envs import XBotLCfg
+from humanoid.envs import L1Cfg
+# from humanoid.envs import *
+from humanoid.utils import  Logger
+import torch
+import pygame
+from threading import Thread
+import csv
+import pandas as pd
+import os
+
+x_vel_cmd, y_vel_cmd, yaw_vel_cmd = 0.0, 0.0, 0.
+# x_scale, y_scale, yaw_scale = 2.5, 2.0, 0.0
+joystick_use = True
+joystick_opened = False
+
+
+if joystick_use:
+
+    pygame.init()
+
+    try:
+        # 获取手柄
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        joystick_opened = True
+    except Exception as e:
+        print(f"无法打开手柄：{e}")
+
+    # 用于控制线程退出的标志
+    exit_flag = False
+
+
+    # 处理手柄输入的线程
+    def handle_joystick_input():
+        global exit_flag, x_vel_cmd, y_vel_cmd, yaw_vel_cmd, head_vel_cmd
+        
+        
+        while not exit_flag:
+            # 获取手柄输入
+            pygame.event.get()
+
+            # 更新机器人命令
+            x_vel_cmd = -joystick.get_axis(1) * 1.5
+            y_vel_cmd = -joystick.get_axis(0) * 1.0
+            yaw_vel_cmd = -joystick.get_axis(3) * 3
+
+            # print(x_vel_cmd, y_vel_cmd, yaw_vel_cmd)
+
+            # 等待一小段时间，可以根据实际情况调整
+            pygame.time.delay(100)
+
+        # 启动线程
+
+    if joystick_opened and joystick_use:
+        joystick_thread = Thread(target=handle_joystick_input)
+        joystick_thread.start()
+class cmd:
+    vx = 1.0
+    vy = 0.0
+    dyaw = 0.0
+    
+
+
+def quaternion_to_euler_array(quat):
+    # Ensure quaternion is in the correct format [x, y, z, w]
+    x, y, z, w = quat
+    
+    # Roll (x-axis rotation)
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + y * y)
+    roll_x = np.arctan2(t0, t1)
+    
+    # Pitch (y-axis rotation)
+    t2 = +2.0 * (w * y - z * x)
+    t2 = np.clip(t2, -1.0, 1.0)
+    pitch_y = np.arcsin(t2)
+    
+    # Yaw (z-axis rotation)
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (y * y + z * z)
+    yaw_z = np.arctan2(t3, t4)
+    
+    # Returns roll, pitch, yaw in a NumPy array in radians
+    return np.array([roll_x, pitch_y, yaw_z])
+
+def get_obs(data,model):
+    '''Extracts an observation from the mujoco data structure
+    '''
+    q = data.qpos.astype(np.double)
+    dq = data.qvel.astype(np.double)
+    torq_measured = data.qfrc_actuator.astype(np.double)
+    quat = data.sensor('orientation').data[[1, 2, 3, 0]].astype(np.double)
+    r = R.from_quat(quat)
+    v = r.apply(data.qvel[:3], inverse=True).astype(np.double)  # In the base frame
+    omega = data.sensor('angular-velocity').data.astype(np.double)
+    gvec = r.apply(np.array([0., 0., -1.]), inverse=True).astype(np.double)
+    base_pos = q[:3]
+    foot_positions = []
+    foot_forces = []
+    for i in range(model.nbody):
+        body_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, i)
+        if '6_link' in body_name:  # 根据你的模型具体命名选择
+            foot_positions.append(data.xpos[i][2].copy().astype(np.double))
+            foot_forces.append(data.cfrc_ext[i][2].copy().astype(np.double)) 
+    
+    return (q, dq, torq_measured, quat, v, omega, gvec, base_pos, foot_positions, foot_forces)
+
+def pd_control(target_q, q, kp, target_dq, dq, kd, cfg):
+    '''Calculates torques from position commands
+    '''
+    torque_out = (target_q + cfg.robot_config.default_dof_pos - q ) * kp - dq * kd
+    return torque_out
+
+
+def run_mujoco(policy, cfg):
+    """
+    Run the Mujoco simulation using the provided policy and configuration.
+
+    Args:
+        policy: The policy used for controlling the simulation.
+        cfg: The configuration object containing simulation settings.
+
+    Returns:
+        None
+    """
+    #########################################play data###############################
+    current_directory = os.getcwd()
+    print("Current directory: ", current_directory)
+    test = pd.read_csv('L1_0_4_TZ_1000HZ.csv', header=None)
+    test = np.array(test)
+    # motor_direction = np.array([-1.0, -1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0])
+    motor_direction = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    #########################################play data###############################
+
+    # 从XML配置文件中创建MuJoCo模型对象。这通常包含了仿真的所有物理特性和对象定义。
+    model = mujoco.MjModel.from_xml_path(cfg.sim_config.mujoco_model_path)
+    
+    # 设置模型的时间步长，这个时间步长决定了物理仿真的精度和速度。
+    model.opt.timestep = cfg.sim_config.dt
+    
+    # 使用模型创建仿真数据对象，这个对象用于存储每一步仿真的状态数据。
+    data = mujoco.MjData(model)
+    num_actuated_joints = cfg.env.num_actions  # This should match the number of actuated joints in your model
+    data.qpos[-num_actuated_joints:] = cfg.robot_config.default_dof_pos
+    # data.qpos[2] = 0.1
+    # 执行一步物理仿真。这会根据当前的状态和模型定义来更新仿真数据（例如，物体的位置和速度）。
+    mujoco.mj_step(model, data)
+    
+    # 创建一个视图器对象，用于可视化仿真。这使得用户可以看到仿真环境和其中的物体如何随时间演变。
+    viewer = mujoco_viewer.MujocoViewer(model, data)
+
+    # 初始化目标关节角度数组，这里全部设置为零。这个数组用于定义期望的控制目标状态。
+    target_q = np.zeros((cfg.env.num_actions), dtype=np.double)
+   
+    # 初始化动作数组，同样全部设置为零。在强化学习或控制任务中，这个数组将被用来存储每一步的控制命令。
+    action = np.zeros((cfg.env.num_actions), dtype=np.double)
+
+    # 初始化一个历史观测的双端队列，用于存储一定数量的过去观测数据。这对于需要考虑时间序列信息的任务特别有用。
+    hist_obs = deque()
+    for _ in range(cfg.env.frame_stack):
+        hist_obs.append(np.zeros([1, cfg.env.num_single_obs], dtype=np.double))
+        # hist_obs.append(np.zeros([1, 46], dtype=np.double))
+
+    # 初始化一个计数器，用于跟踪低级控制循环的迭代次数。
+    count_lowlevel = 1
+    logger = Logger(cfg.sim_config.dt)
+    # f = open('test.csv', 'w', encoding='utf-8', newline="")    
+    # csv_writer = csv.writer(f)
+    stop_state_log = 10000
+    # current_directory = os.getcwd()
+    # print("Current directory: ", current_directory)
+    # test = pd.read_csv('obs.csv')
+    # test = np.array(test)
+
+    np.set_printoptions(formatter={'float': '{:0.4f}'.format})
+
+    for _ in range(int(cfg.sim_config.sim_duration / cfg.sim_config.dt)):
+
+        # Obtain an observation
+        q, dq, torq_measured, quat, v, omega, gvec, base_pos, foot_positions, foot_forces = get_obs(data,model)
+        q = q[-cfg.env.num_actions:]
+        dq = dq[-cfg.env.num_actions:]
+        
+        base_z = base_pos[2]
+        foot_z = foot_positions
+        foot_force_z = foot_forces
+
+        # 1000hz -> 100hz
+        if count_lowlevel % cfg.sim_config.decimation == 0:
+
+            obs = np.zeros([1, cfg.env.num_single_obs], dtype=np.float32)
+            # obs = np.zeros([1, 46], dtype=np.float32)
+            eu_ang = quaternion_to_euler_array(quat)
+            eu_ang[eu_ang > math.pi] -= 2 * math.pi
+
+            obs[0, 0] = math.sin(2 * math.pi * count_lowlevel * cfg.sim_config.dt  / cfg.rewards.cycle_time) * 0
+            obs[0, 1] = math.cos(2 * math.pi * count_lowlevel * cfg.sim_config.dt  / cfg.rewards.cycle_time) * 0
+            obs[0, 2] = x_vel_cmd * cfg.normalization.obs_scales.lin_vel
+            obs[0, 3] = y_vel_cmd * cfg.normalization.obs_scales.lin_vel
+            obs[0, 4] = yaw_vel_cmd * cfg.normalization.obs_scales.ang_vel
+            obs[0, 5:17] = (q - cfg.robot_config.default_dof_pos) * cfg.normalization.obs_scales.dof_pos
+            obs[0, 17:29] = dq * cfg.normalization.obs_scales.dof_vel
+            obs[0, 29:41] = action
+            obs[0, 41:44] = omega
+            obs[0, 44:47] = eu_ang
+            # obs[0, 0] = 0.
+            # obs[0, 1] = 0.
+            # obs[0, 2] = cmd.vx * cfg.normalization.obs_scales.lin_vel
+            # obs[0, 3] = cmd.vy * cfg.normalization.obs_scales.lin_vel
+            # obs[0, 4] = cmd.dyaw * cfg.normalization.obs_scales.ang_vel
+            # obs[0, 5:17] = (q-cfg.robot_config.default_dof_pos) * cfg.normalization.obs_scales.dof_pos
+            # obs[0, 17:29] = dq * cfg.normalization.obs_scales.dof_vel
+            # obs[0, 29:41] = action
+            # obs[0, 41:44] = omega
+            # obs[0, 44:46] = eu_ang[:2]
+            # print(x_vel_cmd, y_vel_cmd, yaw_vel_cmd)
+
+
+            obs = np.clip(obs, -cfg.normalization.clip_observations, cfg.normalization.clip_observations)
+
+            hist_obs.append(obs)
+            hist_obs.popleft()
+
+            policy_input = np.zeros([1, cfg.env.num_observations], dtype=np.float32)
+            # policy_input = np.zeros([1, 690], dtype=np.float32)
+            for i in range(cfg.env.frame_stack):
+                policy_input[0, i * cfg.env.num_single_obs : (i + 1) * cfg.env.num_single_obs] = hist_obs[i][0, :]
+                # policy_input[0, i * 46 : (i + 1) * 46] = hist_obs[i][0, :]
+
+            # arr = policy_input[0]
+            # arr_reshaped = arr.reshape((15, 47))
+            
+            # # 遍历这个二维数组，打印每一行
+            # for row in arr_reshaped:
+            #     print(row)
+            
+            action[:] = policy(torch.tensor(policy_input))[0].detach().numpy()
+            # print("\n", action)
+            action = np.clip(action, -cfg.normalization.clip_actions, cfg.normalization.clip_actions)
+
+            target_q = action * cfg.control.action_scale
+
+        target_dq = np.zeros((cfg.env.num_actions), dtype=np.double)
+        # Generate PD control
+        ########################################play data###############################
+        # target_q[0:2] = test[count_lowlevel, 24:26]
+        # target_q[2] = test[count_lowlevel, 27]
+        # target_q[0:6] = test[count_lowlevel, 12:18] * motor_direction[0:6]
+        # target_q[9:11] = test[count_lowlevel, 28:30]
+        # target_q[11] = test[count_lowlevel, 31]
+        # target_q[6:12] = test[count_lowlevel, 18:24] * motor_direction[6:12]
+
+        # target_q = test[count_lowlevel, :]
+        if count_lowlevel > 3400:
+            count_lowlevel = 0
+        tau = pd_control(target_q, q, cfg.robot_config.kps,
+                        target_dq, dq, cfg.robot_config.kds, cfg)  # Calc torques
+        tau = np.clip(tau, -cfg.robot_config.tau_limit, cfg.robot_config.tau_limit)  # Clamp torques
+        # record = dq 
+        # csv_writer.writerow(record)
+        data.ctrl = tau
+        applied_tau = data.actuator_force
+        
+        # print("\ntau", tau)
+        # print("q", q)
+
+        mujoco.mj_step(model, data)
+        viewer.render()
+        count_lowlevel += 1
+        idx = 5
+        dof_pos_target = target_q + cfg.robot_config.default_dof_pos
+        if _ < stop_state_log:
+            logger.log_states(
+                {   
+                    'base_height' : base_z,
+                    'foot_z_l' : foot_z[0],
+                    'foot_z_r' : foot_z[1],
+                    'foot_forcez_l' : foot_force_z[0],
+                    'foot_forcez_r' : foot_force_z[1],
+                    'base_vel_x': v[0],
+                    'command_x': x_vel_cmd,
+                    'base_vel_y': v[1],
+                    'command_y': y_vel_cmd,
+                    'base_vel_z': v[2],
+                    'base_vel_yaw': omega[2],
+                    'command_yaw': yaw_vel_cmd,
+                    'dof_pos_target': dof_pos_target[idx] ,
+                    'dof_pos': q[idx],
+                    'dof_vel': dq[idx],
+                    'dof_torque': applied_tau[idx],
+                    'cmd_dof_torque': tau[idx],
+                    'dof_pos_target[0]': dof_pos_target[0].item(),
+                    'dof_pos_target[1]': dof_pos_target[1].item(),
+                    'dof_pos_target[2]': dof_pos_target[2].item(),
+                    'dof_pos_target[3]': dof_pos_target[3].item(),
+                    'dof_pos_target[4]': dof_pos_target[4].item(),
+                    'dof_pos_target[5]': dof_pos_target[5].item(),
+                    'dof_pos_target[6]': dof_pos_target[6].item(),
+                    'dof_pos_target[7]': dof_pos_target[7].item(),
+                    'dof_pos_target[8]': dof_pos_target[8].item(),
+                    'dof_pos_target[9]': dof_pos_target[9].item(),
+                    'dof_pos_target[10]': dof_pos_target[10].item(),
+                    'dof_pos_target[11]': dof_pos_target[11].item(),
+                    'dof_pos':    q[0].item(),
+                    'dof_pos[0]': q[0].item(),
+                    'dof_pos[1]': q[1].item(),
+                    'dof_pos[2]': q[2].item(),
+                    'dof_pos[3]': q[3].item(),
+                    'dof_pos[4]': q[4].item(),
+                    'dof_pos[5]': q[5].item(),
+                    'dof_pos[6]': q[6].item(),
+                    'dof_pos[7]': q[7].item(),
+                    'dof_pos[8]': q[8].item(),
+                    'dof_pos[9]': q[9].item(),
+                    'dof_pos[10]': q[10].item(),
+                    'dof_pos[11]': q[11].item(),
+                    # 'dof_torque_target': applied_tau[0].item(),
+                    # 'dof_torque_target[0]': applied_tau[0].item(),
+                    # 'dof_torque_target[1]': applied_tau[1].item(),
+                    # 'dof_torque_target[2]': applied_tau[2].item(),
+                    # 'dof_torque_target[3]': applied_tau[3].item(),
+                    # 'dof_torque_target[4]': applied_tau[4].item(),
+                    # 'dof_torque_target[5]': applied_tau[5].item(),
+                    # 'dof_torque_target[6]': applied_tau[6].item(),
+                    # 'dof_torque_target[7]': applied_tau[7].item(),
+                    # 'dof_torque_target[8]': applied_tau[8].item(),
+                    # 'dof_torque_target[9]': applied_tau[9].item(),
+                    # 'dof_torque_target[10]': applied_tau[10].item(),
+                    # 'dof_torque_target[11]': applied_tau[11].item(),
+                    # 'dof_torque':    torq_measured[6].item(),
+                    # 'dof_torque[0]': torq_measured[6].item(),
+                    # 'dof_torque[1]': torq_measured[7].item(),
+                    # 'dof_torque[2]': torq_measured[8].item(),
+                    # 'dof_torque[3]': torq_measured[9].item(),
+                    # 'dof_torque[4]': torq_measured[10].item(),
+                    # 'dof_torque[5]': torq_measured[11].item(),
+                    # 'dof_torque[6]': torq_measured[12].item(),
+                    # 'dof_torque[7]': torq_measured[13].item(),
+                    # 'dof_torque[8]': torq_measured[14].item(),
+                    # 'dof_torque[9]': torq_measured[15].item(),
+                    # 'dof_torque[10]': torq_measured[16].item(),
+                    # 'dof_torque[11]': torq_measured[17].item(),
+                    'dof_vel': dq[0].item(),
+                    'dof_vel[0]': dq[0].item(),
+                    'dof_vel[1]': dq[1].item(),
+                    'dof_vel[2]': dq[2].item(),
+                    'dof_vel[3]': dq[3].item(),
+                    'dof_vel[4]': dq[4].item(),
+                    'dof_vel[5]': dq[5].item(),
+                    'dof_vel[6]': dq[6].item(),
+                    'dof_vel[7]': dq[7].item(),
+                    'dof_vel[8]': dq[8].item(),
+                    'dof_vel[9]': dq[9].item(),
+                    'dof_vel[10]': dq[10].item(),
+                    'dof_vel[11]': dq[11].item(),
+                }
+                )
+        
+        elif _== stop_state_log:
+            logger.plot_states()
+    # f.close()
+    viewer.close()
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Deployment script.')
+    parser.add_argument('--load_model', type=str, required=True,
+                        help='Run to load from.')
+    parser.add_argument('--terrain', action='store_true', help='terrain or plane')
+    args = parser.parse_args()
+
+    class Sim2simCfg(L1Cfg):
+
+        class sim_config:
+            if args.terrain:
+                mujoco_model_path = f'{LEGGED_GYM_ROOT_DIR}/resources/robots/XBot/mjcf/XBot-L-terrain.xml'
+            else:
+                mujoco_model_path = f'{LEGGED_GYM_ROOT_DIR}/resources/robots/HL/urdf/L1_noarm.xml'
+            sim_duration = 1200.0
+            dt = 0.001
+            decimation = 10
+
+        class robot_config:
+
+            kps = np.array([50, 50, 70, 70, 40, 40, 50, 50, 70, 70, 40, 40], dtype=np.double)
+            kds = np.array([5.0, 5.0, 7.0, 7.0, 2.0, 2.0, 5.0, 5.0, 7.0, 7.0, 2.0, 2.0], dtype=np.double)
+            tau_limit = 200. * np.ones(12, dtype=np.double)
+            default_dof_pos = np.array([0.4, -0.03, -0.34, 0.50, -0.3, 0.0, -0.4, 0.03, 0.34, 0.50, -0.3, 0.0])
+
+    policy = torch.jit.load(args.load_model)
+    run_mujoco(policy, Sim2simCfg())
