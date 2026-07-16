@@ -283,16 +283,16 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "operation": "add",
       },
     ),
-    "torso_mass": EventTermCfg(
-      mode="startup",
-      func=dr.body_mass,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
-        "ranges": (-0.5, 1.5),          # -0.5~1.5 kg to simulate battery mass on real robot
-        "operation": "add",
-        "distribution": "uniform",
-      },
-    ),
+    # "torso_mass": EventTermCfg(
+    #   mode="startup",
+    #   func=dr.body_mass,
+    #   params={
+    #     "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
+    #     "ranges": (-0.5, 1.5),          # -0.5~1.5 kg to simulate battery mass on real robot
+    #     "operation": "add",
+    #     "distribution": "uniform",
+    #   },
+    # ),
   }
 
   ##
@@ -350,7 +350,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-1e-2,#-5-2
+      weight=-3e-3,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",

@@ -1,4 +1,4 @@
-"""CASBOT02 lower-body-observation AMP sim2sim with full-body ONNX actions."""
+"""CASBOT02 leg-observation AMP sim2sim for the current 22-action policy."""
 
 from __future__ import annotations
 
@@ -14,9 +14,10 @@ import numpy as np
 from mjlab.entity import Entity
 
 from src.assets.robots import (
-  CASBOT02_23DOF_ACTION_SCALE,
+  CASBOT02_22DOF_NO_WAIST_ACTION_SCALE,
+  CASBOT02_22DOF_NO_WAIST_JOINT_NAMES,
   CASBOT02_23DOF_JOINT_NAMES,
-  CASBOT02_LEG_JOINT_NAMES,
+  CASBOT02_LEG_ONLY_JOINT_NAMES,
   get_casbot02_23dof_robot_cfg,
 )
 from src.assets.robots.casbot02.casbot02_constants import HOME_KEYFRAME
@@ -63,16 +64,18 @@ DEFAULT_ONNXRUNTIME_PROVIDER = "auto"
 
 SIM_TIMESTEP = 0.005
 HISTORY_LENGTH = 4
-NUM_OBS_JOINTS = len(CASBOT02_LEG_JOINT_NAMES)       # 13 (legs + waist actor obs)
-NUM_POLICY_ACTIONS = len(CASBOT02_23DOF_JOINT_NAMES)  # 23 (full-body policy output)
-NUM_FULL_JOINTS = NUM_POLICY_ACTIONS
+NUM_OBS_JOINTS = len(CASBOT02_LEG_ONLY_JOINT_NAMES)  # 12 leg-only actor obs joints
+NUM_POLICY_ACTIONS = len(CASBOT02_22DOF_NO_WAIST_JOINT_NAMES)  # 22 no-waist policy actions
+NUM_FULL_JOINTS = len(CASBOT02_23DOF_JOINT_NAMES)  # 23 MuJoCo actuators, including waist
 OBS_JOINT_INDICES = np.array(
-  [CASBOT02_23DOF_JOINT_NAMES.index(n) for n in CASBOT02_LEG_JOINT_NAMES],
+  [CASBOT02_23DOF_JOINT_NAMES.index(n) for n in CASBOT02_LEG_ONLY_JOINT_NAMES],
   dtype=np.int64,
 )
-LEGACY_SINGLE_FRAME_OBS_SIZE = 48                     # 3+3+3+13+13+13 = 48
-PHASE_SINGLE_FRAME_OBS_SIZE = 50                      # 3+3+3+2+13+13+13 = 50
-PHASE_PERIOD = 1.0
+ACTION_JOINT_INDICES = np.array(
+  [CASBOT02_23DOF_JOINT_NAMES.index(n) for n in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES],
+  dtype=np.int64,
+)
+CURRENT_SINGLE_FRAME_OBS_SIZE = 45  # 3+3+3+12+12+12, no phase
 COMMAND_X_RANGE = (-3.5, 5.0)
 COMMAND_Y_RANGE = (-1.0, 1.0)
 COMMAND_YAW_RANGE = (-3.14, 3.14 )
@@ -94,7 +97,7 @@ def make_default_joint_pos() -> np.ndarray:
 
 
 def make_obs_joint_pos() -> np.ndarray:
-  """Return default joint positions for actor-observed joints (legs + waist)."""
+  """Return default joint positions for the 12 actor-observed leg joints."""
   return make_default_joint_pos()[OBS_JOINT_INDICES]
 
 
@@ -208,8 +211,6 @@ def get_obs_frame(
   command: np.ndarray,
   last_action: np.ndarray,
   default_joint_pos: np.ndarray,
-  sim_time: float,
-  include_phase: bool,
 ) -> np.ndarray:
   base_ang_vel = np.asarray(
     data.sensor("angular-velocity").data, dtype=np.float64
@@ -228,35 +229,15 @@ def get_obs_frame(
     base_ang_vel,
     projected_gravity,
     command,
+    joint_pos_rel,
+    joint_vel_rel,
+    last_action,
   ]
-  if include_phase:
-    if np.linalg.norm(command) < 0.1:
-      phase = np.zeros(2, dtype=np.float64)
-    else:
-      phase_value = (sim_time % PHASE_PERIOD) / PHASE_PERIOD
-      phase = np.array(
-        [
-          np.sin(phase_value * 2.0 * np.pi),
-          np.cos(phase_value * 2.0 * np.pi),
-        ],
-        dtype=np.float64,
-      )
-    obs_parts.append(phase)
-  obs_parts.extend(
-    [
-      joint_pos_rel,
-      joint_vel_rel,
-      last_action,
-    ]
-  )
   obs = np.concatenate(obs_parts, axis=0)
-  expected_size = (
-    PHASE_SINGLE_FRAME_OBS_SIZE if include_phase else LEGACY_SINGLE_FRAME_OBS_SIZE
-  )
-  if obs.shape != (expected_size,):
+  if obs.shape != (CURRENT_SINGLE_FRAME_OBS_SIZE,):
     raise RuntimeError(
       "Expected single-frame obs shape "
-      f"({expected_size},), got {obs.shape}"
+      f"({CURRENT_SINGLE_FRAME_OBS_SIZE},), got {obs.shape}"
     )
   return obs.astype(np.float32)
 
@@ -304,9 +285,9 @@ def ctrl_range(model: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
 
 
 def make_action_scale() -> np.ndarray:
-  """Return 23-dim action scales in CASBOT02 policy joint order."""
+  """Return 22-dim action scales in the current no-waist policy joint order."""
   return np.array(
-    [CASBOT02_23DOF_ACTION_SCALE[name] for name in CASBOT02_23DOF_JOINT_NAMES],
+    [CASBOT02_22DOF_NO_WAIST_ACTION_SCALE[name] for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES],
     dtype=np.float64,
   )
 
@@ -439,33 +420,25 @@ def run(model_arg: str = "") -> None:
   if policy.output_dim is not None and policy.output_dim != NUM_POLICY_ACTIONS:
     raise RuntimeError(
       f"Expected ONNX output dim {NUM_POLICY_ACTIONS}, got {policy.output_dim}. "
-      "This sim2sim script expects the new lower-body-observation policy with "
-      "23 full-body actions; re-export the latest checkpoint if this is an old "
-      "13-action leg-only ONNX."
+      "This sim2sim script expects the current 22-action no-waist lower-body policy."
     )
-  input_dim = policy.input_dim or HISTORY_LENGTH * PHASE_SINGLE_FRAME_OBS_SIZE
-  if input_dim % PHASE_SINGLE_FRAME_OBS_SIZE == 0:
-    single_frame_obs_size = PHASE_SINGLE_FRAME_OBS_SIZE
-    include_phase = True
-  elif input_dim % LEGACY_SINGLE_FRAME_OBS_SIZE == 0:
-    single_frame_obs_size = LEGACY_SINGLE_FRAME_OBS_SIZE
-    include_phase = False
-  else:
+  input_dim = policy.input_dim or HISTORY_LENGTH * CURRENT_SINGLE_FRAME_OBS_SIZE
+  if input_dim % CURRENT_SINGLE_FRAME_OBS_SIZE != 0:
     raise RuntimeError(
-      "ONNX input dim must be a multiple of supported single-frame obs sizes. "
-      f"Got input_dim={input_dim}, supported=({LEGACY_SINGLE_FRAME_OBS_SIZE}, "
-      f"{PHASE_SINGLE_FRAME_OBS_SIZE})."
+      "ONNX input dim must be a multiple of the current single-frame obs size. "
+      f"Got input_dim={input_dim}, supported={CURRENT_SINGLE_FRAME_OBS_SIZE}."
     )
+  single_frame_obs_size = CURRENT_SINGLE_FRAME_OBS_SIZE
   history_length = input_dim // single_frame_obs_size
-  obs_layout = "phase" if include_phase else "legacy"
+  obs_layout = "leg_no_phase_12j_22a"
   model = build_model()
   if model.nu != NUM_FULL_JOINTS:
     raise RuntimeError(f"Expected {NUM_FULL_JOINTS} actuators, got {model.nu}")
 
   data = mujoco.MjData(model)
-  default_joint_pos = make_default_joint_pos()          # 23-dim all joints
-  default_obs_joint_pos = make_obs_joint_pos()          # 13-dim legs + waist
-  action_scale = make_action_scale()                    # 23-dim
+  default_joint_pos = make_default_joint_pos()          # 23-dim all MuJoCo joints
+  default_obs_joint_pos = make_obs_joint_pos()          # 12-dim leg-only obs joints
+  action_scale = make_action_scale()                    # 22-dim no-waist policy actions
   ctrl_lo, ctrl_hi = ctrl_range(model)
   command = np.array(
     [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW],
@@ -510,8 +483,6 @@ def run(model_arg: str = "") -> None:
           command,
           last_action,
           default_obs_joint_pos,
-          step * model.opt.timestep,
-          include_phase,
         )
         if not history:
           for _ in range(history_length):
@@ -527,7 +498,11 @@ def run(model_arg: str = "") -> None:
           )
 
         last_action = action[:NUM_OBS_JOINTS].astype(np.float32)
-        target_pos = default_joint_pos + action.astype(np.float64) * action_scale
+        target_pos = default_joint_pos.copy()
+        target_pos[ACTION_JOINT_INDICES] = (
+          default_joint_pos[ACTION_JOINT_INDICES]
+          + action.astype(np.float64) * action_scale
+        )
         target_pos = np.clip(target_pos, ctrl_lo, ctrl_hi)
 
         viewer.cam.lookat = [
@@ -566,7 +541,7 @@ def run(model_arg: str = "") -> None:
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(
-    description="CASBOT02 lower-body-observation AMP sim2sim with ONNX policy in MuJoCo viewer."
+    description="CASBOT02 current lower-body AMP sim2sim with ONNX policy in MuJoCo viewer."
   )
   parser.add_argument(
     "model_path",

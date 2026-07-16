@@ -30,7 +30,7 @@ def casbot02_leg_amp_ppo_runner_cfg():
   cfg.amp_motion_files = os.path.normpath(
     os.path.join(_MOTION_DATA_DIR, "WalkandRun_TurnBoost_v1")
   )
-  cfg.min_normalized_std = [0.05] * 23
+  cfg.min_normalized_std = [0.05] * 22
   cfg.amp_body_names = CASBOT02_23DOF_AMP_BODY_NAMES
   cfg.amp_anchor_name = "torso"
   return cfg

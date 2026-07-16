@@ -93,6 +93,12 @@ CASBOT02_LEG_JOINT_NAMES: tuple[str, ...] = (
   "waist_yaw_joint",
 )
 
+CASBOT02_LEG_ONLY_JOINT_NAMES: tuple[str, ...] = CASBOT02_LEG_JOINT_NAMES[:-1]
+
+CASBOT02_22DOF_NO_WAIST_JOINT_NAMES: tuple[str, ...] = tuple(
+  name for name in CASBOT02_23DOF_JOINT_NAMES if name != "waist_yaw_joint"
+)
+
 
 def get_assets(meshdir: str) -> dict[str, bytes]:
   assets: dict[str, bytes] = {}
@@ -293,6 +299,11 @@ for a in CASBOT02_23DOF_ARTICULATION.actuators:
   assert e is not None
   for n in base.target_names_expr:
     CASBOT02_23DOF_ACTION_SCALE[n] = 0.25 * e / s
+
+CASBOT02_22DOF_NO_WAIST_ACTION_SCALE: dict[str, float] = {
+  name: CASBOT02_23DOF_ACTION_SCALE[name]
+  for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
+}
 
 
 if __name__ == "__main__":

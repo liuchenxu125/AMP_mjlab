@@ -158,8 +158,19 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       "distribution": "uniform",
     },
   )
+  cfg.events["base_mass"] = EventTermCfg(
+    mode="startup",
+    func=envs_mdp.dr.body_mass,
+    params={
+      # The source URDF base_link is named torso in the MuJoCo model.
+      "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
+      "ranges": (-0.5, 0.5),
+      "operation": "add",
+      "distribution": "uniform",
+    },
+  )
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso",)
-  cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
+  # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
 
   cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
