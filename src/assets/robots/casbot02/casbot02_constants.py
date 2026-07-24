@@ -99,6 +99,13 @@ CASBOT02_22DOF_NO_WAIST_JOINT_NAMES: tuple[str, ...] = tuple(
   name for name in CASBOT02_23DOF_JOINT_NAMES if name != "waist_yaw_joint"
 )
 
+# The lower-body policy keeps the waist and both wrist yaw joints at home pose.
+CASBOT02_20DOF_POLICY_JOINT_NAMES: tuple[str, ...] = tuple(
+  name
+  for name in CASBOT02_23DOF_JOINT_NAMES
+  if name not in ("waist_yaw_joint", "upper_left_5_joint", "upper_right_5_joint")
+)
+
 
 def get_assets(meshdir: str) -> dict[str, bytes]:
   assets: dict[str, bytes] = {}
@@ -303,6 +310,11 @@ for a in CASBOT02_23DOF_ARTICULATION.actuators:
 CASBOT02_22DOF_NO_WAIST_ACTION_SCALE: dict[str, float] = {
   name: CASBOT02_23DOF_ACTION_SCALE[name]
   for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
+}
+
+CASBOT02_20DOF_POLICY_ACTION_SCALE: dict[str, float] = {
+  name: CASBOT02_23DOF_ACTION_SCALE[name]
+  for name in CASBOT02_20DOF_POLICY_JOINT_NAMES
 }
 
 

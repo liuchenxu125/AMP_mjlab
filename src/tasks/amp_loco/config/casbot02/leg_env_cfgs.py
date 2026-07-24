@@ -1,9 +1,9 @@
 """CASBOT02 AMP locomotion with lower-body actor observations.
 
 Actor and critic observations expose only the 12 leg joints and omit phase.
-The policy controls all CASBOT02 joints except ``waist_yaw_joint``. AMP
-discriminator observations keep the same full-body 13 key bodies as the
-full-body AMP task.
+The policy controls all CASBOT02 joints except the waist and two wrist yaw
+joints. AMP discriminator observations keep the same full-body 13 key bodies
+as the full-body AMP task.
 """
 
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -11,8 +11,8 @@ from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 
 from src.assets.robots import (
-  CASBOT02_22DOF_NO_WAIST_ACTION_SCALE,
-  CASBOT02_22DOF_NO_WAIST_JOINT_NAMES,
+  CASBOT02_20DOF_POLICY_ACTION_SCALE,
+  CASBOT02_20DOF_POLICY_JOINT_NAMES,
   CASBOT02_23DOF_AMP_BODY_NAMES,
   CASBOT02_LEG_ONLY_JOINT_NAMES,
 )
@@ -31,7 +31,7 @@ def _remove_phase_observation(cfg: ManagerBasedRlEnvCfg) -> None:
 
 
 def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
-  """Use 12-leg actor/critic state, 22-DoF no-waist action, and full AMP style."""
+  """Use 12-leg state, 20-DoF action without waist/wrists, and full AMP style."""
   LEG_ONLY_ASSET = SceneEntityCfg(
     "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
   )
@@ -43,8 +43,8 @@ def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg
 
   joint_pos_action = cfg.actions["joint_pos"]
   assert isinstance(joint_pos_action, JointPositionActionCfg)
-  joint_pos_action.actuator_names = CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
-  joint_pos_action.scale = CASBOT02_22DOF_NO_WAIST_ACTION_SCALE
+  joint_pos_action.actuator_names = CASBOT02_20DOF_POLICY_JOINT_NAMES
+  joint_pos_action.scale = CASBOT02_20DOF_POLICY_ACTION_SCALE
 
   # ---- Actor observations: deployment-visible state only (12 leg joints) ----
   cfg.observations["actor"].terms["joint_pos"].params["asset_cfg"] = LEG_ONLY_ASSET

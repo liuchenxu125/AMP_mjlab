@@ -1,6 +1,12 @@
 """CASBOT02 humanoid assets."""
 
 from .casbot02_constants import (
+  CASBOT02_20DOF_POLICY_ACTION_SCALE as CASBOT02_20DOF_POLICY_ACTION_SCALE,
+)
+from .casbot02_constants import (
+  CASBOT02_20DOF_POLICY_JOINT_NAMES as CASBOT02_20DOF_POLICY_JOINT_NAMES,
+)
+from .casbot02_constants import (
   CASBOT02_22DOF_NO_WAIST_ACTION_SCALE as CASBOT02_22DOF_NO_WAIST_ACTION_SCALE,
 )
 from .casbot02_constants import (
