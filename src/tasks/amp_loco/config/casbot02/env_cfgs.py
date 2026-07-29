@@ -163,7 +163,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     func=envs_mdp.dr.joint_armature,
     params={
       "asset_cfg": SceneEntityCfg("robot"),
-      "ranges": (0.95, 1.05),
+      "ranges": (0.90, 1.10),
       "operation": "scale",
       "distribution": "uniform",
       "shared_random": False,
@@ -175,7 +175,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       # The source URDF base_link is named torso in the MuJoCo model.
       "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
-      "ranges": (-1.0, 1.0),
+      "ranges": (-1.5, 1.5),
       "operation": "add",
       "distribution": "uniform",
     },
@@ -227,7 +227,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 3.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
   cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.45
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
@@ -358,7 +358,7 @@ def casbot02_amp_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   if play:
     twist_cmd = cfg.commands["twist"]
     assert isinstance(twist_cmd, UniformVelocityCommandCfg)
-    twist_cmd.ranges.lin_vel_x = (0, 0.7)
+    twist_cmd.ranges.lin_vel_x = (-0.5, 0.7)
     twist_cmd.ranges.lin_vel_y = (0, 0)
     twist_cmd.ranges.ang_vel_z = (-1.57, 1.57)
 
