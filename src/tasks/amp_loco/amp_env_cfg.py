@@ -201,7 +201,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     "twist": UniformVelocityCommandCfg(
       entity_name="robot",
       resampling_time_range=(3.0, 8.0),
-      rel_standing_envs=0.05,
+      rel_standing_envs=0.1,
       rel_heading_envs=0.25,
       heading_command=True,
       heading_control_stiffness=0.5,
@@ -361,7 +361,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-3e-3,#-5-2
+      weight=-4e-3,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",

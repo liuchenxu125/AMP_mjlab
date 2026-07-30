@@ -116,7 +116,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   twist_cmd.linear_threshold = 0.15
   twist_cmd.yaw_threshold = 0.3
   twist_cmd.standing_height = 0.92
-  twist_cmd.squat_height_range = (0.62, 0.85)
+  twist_cmd.squat_height_range = (0.45, 0.92)
   # twist_cmd.ang_vel_deadband = 0.3  # 去掉 deadband，让策略学习全范围转弯命令
 
   # CASBOT02 source XML geoms are mostly unnamed, so randomize all robot geoms
@@ -168,7 +168,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     func=envs_mdp.dr.joint_armature,
     params={
       "asset_cfg": SceneEntityCfg("robot"),
-      "ranges": (0.90, 1.10),
+      "ranges": (0.95, 1.05),
       "operation": "scale",
       "distribution": "uniform",
       "shared_random": False,
@@ -180,7 +180,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       # The source URDF base_link is named torso in the MuJoCo model.
       "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
-      "ranges": (-1.5, 1.5),
+      "ranges": (-1.0, 1.0),
       "operation": "add",
       "distribution": "uniform",
     },
@@ -202,7 +202,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso","waist_yaw_link",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
 
-  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
+  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.0
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
 
   _motion_base = os.path.join(
