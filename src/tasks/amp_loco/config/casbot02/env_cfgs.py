@@ -163,7 +163,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     func=envs_mdp.dr.joint_armature,
     params={
       "asset_cfg": SceneEntityCfg("robot"),
-      "ranges": (0.90, 1.10),
+      "ranges": (0.95, 1.05),
       "operation": "scale",
       "distribution": "uniform",
       "shared_random": False,
@@ -175,7 +175,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       # The source URDF base_link is named torso in the MuJoCo model.
       "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
-      "ranges": (-1.5, 1.5),
+      "ranges": (-1.0, 1.0),
       "operation": "add",
       "distribution": "uniform",
     },
