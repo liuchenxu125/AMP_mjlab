@@ -66,6 +66,8 @@ class AMPPPO:
         # Distributed training parameters
         multi_gpu_cfg: dict | None = None,
         share_cnn_encoders=False,
+        # Dual-AMP configuration
+        amp_config: dict | None = None,
     ):
         # device-related parameters
         self.device = device
@@ -113,22 +115,61 @@ class AMPPPO:
         # Discriminator components
         self.amploss_coef = 1.0
         self.min_std = min_std
-        self.discriminator = discriminator
-        self.discriminator.to(self.device)
         self.amp_transition = RolloutStorage.Transition()
-        self.amp_storage = ReplayBuffer(discriminator.input_dim // 2, amp_replay_buffer_size, device)
-        self.amp_data = amp_data
-        self.amp_normalizer = amp_normalizer
+
+        if amp_config is not None and amp_config.get("is_dual"):
+            self.is_dual_amp = True
+            self.discriminators = {
+                "walk": amp_config["walk"]["discriminator"],
+                "squat": amp_config["squat"]["discriminator"],
+            }
+            self.discriminators["walk"].to(self.device)
+            self.discriminators["squat"].to(self.device)
+            self.amp_storages = {
+                "walk": ReplayBuffer(
+                    self.discriminators["walk"].input_dim // 2, amp_replay_buffer_size, device
+                ),
+                "squat": ReplayBuffer(
+                    self.discriminators["squat"].input_dim // 2, amp_replay_buffer_size, device
+                ),
+            }
+            self.amp_datas = {
+                "walk": amp_config["walk"]["data"],
+                "squat": amp_config["squat"]["data"],
+            }
+            self.amp_normalizers = {
+                "walk": amp_config["walk"]["normalizer"],
+                "squat": amp_config["squat"]["normalizer"],
+            }
+            # Legacy aliases for save/load compat
+            self.discriminator = self.discriminators["walk"]
+            self.amp_normalizer = self.amp_normalizers["walk"]
+        else:
+            self.is_dual_amp = False
+            self.discriminator = discriminator
+            self.discriminator.to(self.device)
+            self.amp_storage = ReplayBuffer(discriminator.input_dim // 2, amp_replay_buffer_size, device)
+            self.amp_data = amp_data
+            self.amp_normalizer = amp_normalizer
 
         # PPO components
         self.policy = policy
         self.policy.to(self.device)
         # Create optimizer
-        params = [
-            {"params": self.policy.parameters(), "name": "policy"},
-            {"params": self.discriminator.trunk.parameters(), "weight_decay": 10e-4, "name": "amp_trunk"},
-            {"params": self.discriminator.amp_linear.parameters(), "weight_decay": 10e-2, "name": "amp_head"},
-        ]
+        if self.is_dual_amp:
+            params = [
+                {"params": self.policy.parameters(), "name": "policy"},
+                {"params": self.discriminators["walk"].trunk.parameters(), "weight_decay": 10e-4, "name": "walk_amp_trunk"},
+                {"params": self.discriminators["walk"].amp_linear.parameters(), "weight_decay": 10e-2, "name": "walk_amp_head"},
+                {"params": self.discriminators["squat"].trunk.parameters(), "weight_decay": 10e-4, "name": "squat_amp_trunk"},
+                {"params": self.discriminators["squat"].amp_linear.parameters(), "weight_decay": 10e-2, "name": "squat_amp_head"},
+            ]
+        else:
+            params = [
+                {"params": self.policy.parameters(), "name": "policy"},
+                {"params": self.discriminator.trunk.parameters(), "weight_decay": 10e-4, "name": "amp_trunk"},
+                {"params": self.discriminator.amp_linear.parameters(), "weight_decay": 10e-2, "name": "amp_head"},
+            ]
         self.optimizer = optim.Adam(params, lr=learning_rate)
         # Create rollout storage
         self.storage: RolloutStorage = None  # type: ignore
@@ -184,7 +225,7 @@ class AMPPPO:
         self.amp_transition.observations = amp_obs
         return self.transition.actions
 
-    def process_env_step(self, rewards, dones, infos, amp_obs):
+    def process_env_step(self, rewards, dones, infos, amp_obs, moving_mask=None):
         # Record the rewards and dones
         # Note: we clone here because later on we bootstrap the rewards based on timeouts
         self.transition.rewards = rewards.clone()
@@ -209,7 +250,21 @@ class AMPPPO:
             )
 
         # record the transition
-        self.amp_storage.insert(self.amp_transition.observations, amp_obs)
+        if self.is_dual_amp and moving_mask is not None:
+            walk_mask = moving_mask.bool()
+            squat_mask = ~walk_mask
+            walk_ids = walk_mask.nonzero(as_tuple=False).flatten()
+            squat_ids = squat_mask.nonzero(as_tuple=False).flatten()
+            if len(walk_ids) > 0:
+                self.amp_storages["walk"].insert(
+                    self.amp_transition.observations[walk_ids], amp_obs[walk_ids]
+                )
+            if len(squat_ids) > 0:
+                self.amp_storages["squat"].insert(
+                    self.amp_transition.observations[squat_ids], amp_obs[squat_ids]
+                )
+        else:
+            self.amp_storage.insert(self.amp_transition.observations, amp_obs)
         self.storage.add_transitions(self.transition)
         self.transition.clear()
         self.amp_transition.clear()
@@ -249,17 +304,46 @@ class AMPPPO:
         else:
             generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
 
-        amp_policy_generator = self.amp_storage.feed_forward_generator(
-            self.num_learning_epochs * self.num_mini_batches,
-            self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
-        )
-        amp_expert_generator = self.amp_data.feed_forward_generator(
-            self.num_learning_epochs * self.num_mini_batches,
-            self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
-        )
+        if self.is_dual_amp:
+            amp_policy_gen_walk = self.amp_storages["walk"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_expert_gen_walk = self.amp_datas["walk"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_policy_gen_squat = self.amp_storages["squat"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_expert_gen_squat = self.amp_datas["squat"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_zipper = zip(
+                generator,
+                amp_policy_gen_walk, amp_expert_gen_walk,
+                amp_policy_gen_squat, amp_expert_gen_squat,
+            )
+        else:
+            amp_policy_generator = self.amp_storage.feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_expert_generator = self.amp_data.feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_zipper = zip(generator, amp_policy_generator, amp_expert_generator)
 
         # iterate over batches
-        for sample, sample_amp_policy, sample_amp_expert in zip(generator, amp_policy_generator, amp_expert_generator):
+        for amp_items in amp_zipper:
+            if self.is_dual_amp:
+                (sample, sample_amp_policy_walk, sample_amp_expert_walk,
+                 sample_amp_policy_squat, sample_amp_expert_squat) = amp_items
+            else:
+                sample, sample_amp_policy, sample_amp_expert = amp_items
             (
                 obs_batch,
                 critic_obs_batch,
@@ -433,21 +517,40 @@ class AMPPPO:
                 rnd_loss = mseloss(predicted_embedding, target_embedding)
 
             # Discriminator loss.
-            policy_state, policy_next_state = sample_amp_policy
-            expert_state, expert_next_state = sample_amp_expert
-            if self.amp_normalizer is not None:
-                with torch.no_grad():
-                    policy_state = self.amp_normalizer.normalize_torch(policy_state, self.device)
-                    policy_next_state = self.amp_normalizer.normalize_torch(policy_next_state, self.device)
-                    expert_state = self.amp_normalizer.normalize_torch(expert_state, self.device)
-                    expert_next_state = self.amp_normalizer.normalize_torch(expert_next_state, self.device)
-            policy_d = self.discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
-            expert_d = self.discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
-            expert_loss = torch.nn.MSELoss()(expert_d, torch.ones(expert_d.size(), device=self.device))
-            policy_loss = torch.nn.MSELoss()(policy_d, -1 * torch.ones(policy_d.size(), device=self.device))
-            amp_loss = 0.5 * (expert_loss + policy_loss)
-            grad_pen_loss = self.discriminator.compute_grad_pen(*sample_amp_expert, lambda_=10)
-            loss += self.amploss_coef * amp_loss + self.amploss_coef * grad_pen_loss
+            if self.is_dual_amp:
+                # Walk discriminator
+                w_pol_s, w_pol_ns = sample_amp_policy_walk
+                w_exp_s, w_exp_ns = sample_amp_expert_walk
+                w_amp_loss, w_gp_loss, w_pol_d, w_exp_d = self._compute_amp_loss(
+                    w_pol_s, w_pol_ns, w_exp_s, w_exp_ns,
+                    self.discriminators["walk"], self.amp_normalizers["walk"],
+                )
+                # Squat discriminator
+                s_pol_s, s_pol_ns = sample_amp_policy_squat
+                s_exp_s, s_exp_ns = sample_amp_expert_squat
+                s_amp_loss, s_gp_loss, s_pol_d, s_exp_d = self._compute_amp_loss(
+                    s_pol_s, s_pol_ns, s_exp_s, s_exp_ns,
+                    self.discriminators["squat"], self.amp_normalizers["squat"],
+                )
+                amp_loss = w_amp_loss + s_amp_loss
+                grad_pen_loss = w_gp_loss + s_gp_loss
+                loss += self.amploss_coef * amp_loss + self.amploss_coef * grad_pen_loss
+            else:
+                policy_state, policy_next_state = sample_amp_policy
+                expert_state, expert_next_state = sample_amp_expert
+                if self.amp_normalizer is not None:
+                    with torch.no_grad():
+                        policy_state = self.amp_normalizer.normalize_torch(policy_state, self.device)
+                        policy_next_state = self.amp_normalizer.normalize_torch(policy_next_state, self.device)
+                        expert_state = self.amp_normalizer.normalize_torch(expert_state, self.device)
+                        expert_next_state = self.amp_normalizer.normalize_torch(expert_next_state, self.device)
+                policy_d = self.discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
+                expert_d = self.discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
+                expert_loss = torch.nn.MSELoss()(expert_d, torch.ones(expert_d.size(), device=self.device))
+                policy_loss = torch.nn.MSELoss()(policy_d, -1 * torch.ones(policy_d.size(), device=self.device))
+                amp_loss = 0.5 * (expert_loss + policy_loss)
+                grad_pen_loss = self.discriminator.compute_grad_pen(*sample_amp_expert, lambda_=10)
+                loss += self.amploss_coef * amp_loss + self.amploss_coef * grad_pen_loss
 
             # Compute the gradients
             # -- For PPO
@@ -494,7 +597,14 @@ class AMPPPO:
             if self.rnd_optimizer:
                 self.rnd_optimizer.step()
 
-            if self.amp_normalizer is not None:
+            if self.is_dual_amp:
+                if self.amp_normalizers["walk"] is not None:
+                    self.amp_normalizers["walk"].update(w_pol_s.cpu().numpy())
+                    self.amp_normalizers["walk"].update(w_exp_s.cpu().numpy())
+                if self.amp_normalizers["squat"] is not None:
+                    self.amp_normalizers["squat"].update(s_pol_s.cpu().numpy())
+                    self.amp_normalizers["squat"].update(s_exp_s.cpu().numpy())
+            elif self.amp_normalizer is not None:
                 self.amp_normalizer.update(policy_state.cpu().numpy())
                 self.amp_normalizer.update(expert_state.cpu().numpy())
 
@@ -505,8 +615,12 @@ class AMPPPO:
             mean_entropy += entropy_batch.mean().item()
             mean_amp_loss += amp_loss.item()
             mean_grad_pen_loss += grad_pen_loss.item()
-            mean_policy_pred += policy_d.mean().item()
-            mean_expert_pred += expert_d.mean().item()
+            if self.is_dual_amp:
+                mean_policy_pred += (w_pol_d.mean().item() + s_pol_d.mean().item()) / 2.0
+                mean_expert_pred += (w_exp_d.mean().item() + s_exp_d.mean().item()) / 2.0
+            else:
+                mean_policy_pred += policy_d.mean().item()
+                mean_expert_pred += expert_d.mean().item()
             # -- RND loss
             if mean_rnd_loss is not None:
                 mean_rnd_loss += rnd_loss.item()
@@ -571,6 +685,28 @@ class AMPPPO:
         """Return the policy module."""
         return self.policy
 
+    @staticmethod
+    def _compute_amp_loss(
+        policy_state, policy_next_state,
+        expert_state, expert_next_state,
+        discriminator, normalizer,
+    ):
+        """Compute AMP loss for a single discriminator."""
+        if normalizer is not None:
+            with torch.no_grad():
+                device = policy_state.device
+                policy_state = normalizer.normalize_torch(policy_state, device)
+                policy_next_state = normalizer.normalize_torch(policy_next_state, device)
+                expert_state = normalizer.normalize_torch(expert_state, device)
+                expert_next_state = normalizer.normalize_torch(expert_next_state, device)
+        policy_d = discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
+        expert_d = discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
+        expert_loss = torch.nn.MSELoss()(expert_d, torch.ones(expert_d.size(), device=policy_d.device))
+        policy_loss = torch.nn.MSELoss()(policy_d, -1 * torch.ones(policy_d.size(), device=policy_d.device))
+        amp_loss = 0.5 * (expert_loss + policy_loss)
+        grad_pen_loss = discriminator.compute_grad_pen(expert_state, expert_next_state, lambda_=10)
+        return amp_loss, grad_pen_loss, policy_d, expert_d
+
     def save(self) -> dict:
         """Serialize algorithm state for checkpointing (v5 format)."""
         sd = self.policy.state_dict()
@@ -586,9 +722,15 @@ class AMPPPO:
             "actor_state_dict": actor_sd,
             "critic_state_dict": critic_sd,
             "optimizer_state_dict": self.optimizer.state_dict(),
-            "discriminator_state_dict": self.discriminator.state_dict(),
-            "amp_normalizer": self.amp_normalizer,
         }
+        if self.is_dual_amp:
+            result["walk_discriminator_state_dict"] = self.discriminators["walk"].state_dict()
+            result["squat_discriminator_state_dict"] = self.discriminators["squat"].state_dict()
+            result["walk_amp_normalizer"] = self.amp_normalizers["walk"]
+            result["squat_amp_normalizer"] = self.amp_normalizers["squat"]
+        else:
+            result["discriminator_state_dict"] = self.discriminator.state_dict()
+            result["amp_normalizer"] = self.amp_normalizer
         return result
 
     def load(self, loaded_dict: dict, load_cfg: dict | None = None, strict: bool = True) -> bool:
@@ -625,10 +767,27 @@ class AMPPPO:
         self.policy.load_state_dict(sd, strict=strict)
 
         # Load discriminator and AMP normalizer if present
-        if "discriminator_state_dict" in loaded_dict:
-            self.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
-        if "amp_normalizer" in loaded_dict:
-            self.amp_normalizer = loaded_dict["amp_normalizer"]
+        if self.is_dual_amp:
+            if "walk_discriminator_state_dict" in loaded_dict:
+                self.discriminators["walk"].load_state_dict(
+                    loaded_dict["walk_discriminator_state_dict"]
+                )
+                self.discriminators["squat"].load_state_dict(
+                    loaded_dict["squat_discriminator_state_dict"]
+                )
+                self.amp_normalizers["walk"] = loaded_dict.get(
+                    "walk_amp_normalizer", self.amp_normalizers["walk"]
+                )
+                self.amp_normalizers["squat"] = loaded_dict.get(
+                    "squat_amp_normalizer", self.amp_normalizers["squat"]
+                )
+            elif "discriminator_state_dict" in loaded_dict:
+                print("[WARN] v1 checkpoint in dual-AMP mode. Only actor/critic loaded.")
+        else:
+            if "discriminator_state_dict" in loaded_dict:
+                self.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
+            if "amp_normalizer" in loaded_dict:
+                self.amp_normalizer = loaded_dict["amp_normalizer"]
 
         return load_actor and load_critic
 

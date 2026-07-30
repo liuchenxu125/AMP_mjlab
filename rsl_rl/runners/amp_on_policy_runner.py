@@ -164,21 +164,83 @@ class AmpOnPolicyRunner:
         # Resolve all body names from the environment's robot entity
         robot_entity = self.env.unwrapped.scene["robot"]
         all_body_names = robot_entity.body_names
-        amp_data = AMPLoader(
-            motion_file=train_cfg["amp_motion_files"],
-            body_names=train_cfg["amp_body_names"],
-            anchor_name=train_cfg["amp_anchor_name"],
-            all_body_names=all_body_names,
-            device=self.device,
-        )
-        amp_normalizer = Normalizer(amp_data.observation_dim)
-        discriminator = Discriminator(
-            amp_data.observation_dim * 2,
-            train_cfg["amp_reward_coef"],
-            train_cfg["amp_discr_hidden_dims"],
-            device,
-            train_cfg["amp_task_reward_lerp"],
-        ).to(self.device)
+
+        # Check for dual-AMP configuration
+        walk_motion_files = train_cfg.get("amp_walk_motion_files", "")
+        squat_motion_files = train_cfg.get("amp_squat_motion_files", "")
+        is_dual_amp = bool(walk_motion_files and squat_motion_files)
+
+        if is_dual_amp:
+            print("[Dual-AMP] Configuring walk + squat discriminators.")
+            # Walk AMP
+            walk_amp_data = AMPLoader(
+                motion_file=walk_motion_files,
+                body_names=train_cfg["amp_body_names"],
+                anchor_name=train_cfg["amp_anchor_name"],
+                all_body_names=all_body_names,
+                device=self.device,
+            )
+            walk_normalizer = Normalizer(walk_amp_data.observation_dim)
+            walk_discriminator = Discriminator(
+                walk_amp_data.observation_dim * 2,
+                train_cfg["amp_reward_coef"],
+                train_cfg["amp_discr_hidden_dims"],
+                device,
+                train_cfg["amp_task_reward_lerp"],
+            ).to(self.device)
+            # Squat AMP
+            squat_amp_data = AMPLoader(
+                motion_file=squat_motion_files,
+                body_names=train_cfg["amp_body_names"],
+                anchor_name=train_cfg["amp_anchor_name"],
+                all_body_names=all_body_names,
+                device=self.device,
+            )
+            squat_normalizer = Normalizer(squat_amp_data.observation_dim)
+            squat_discriminator = Discriminator(
+                squat_amp_data.observation_dim * 2,
+                train_cfg["amp_reward_coef"],
+                train_cfg["amp_discr_hidden_dims"],
+                device,
+                train_cfg["amp_task_reward_lerp"],
+            ).to(self.device)
+            self.amp_config = {
+                "is_dual": True,
+                "walk": {
+                    "data": walk_amp_data,
+                    "normalizer": walk_normalizer,
+                    "discriminator": walk_discriminator,
+                },
+                "squat": {
+                    "data": squat_amp_data,
+                    "normalizer": squat_normalizer,
+                    "discriminator": squat_discriminator,
+                },
+            }
+        else:
+            print("[AMP] Configuring single discriminator (legacy mode).")
+            amp_data = AMPLoader(
+                motion_file=train_cfg["amp_motion_files"],
+                body_names=train_cfg["amp_body_names"],
+                anchor_name=train_cfg["amp_anchor_name"],
+                all_body_names=all_body_names,
+                device=self.device,
+            )
+            amp_normalizer = Normalizer(amp_data.observation_dim)
+            discriminator = Discriminator(
+                amp_data.observation_dim * 2,
+                train_cfg["amp_reward_coef"],
+                train_cfg["amp_discr_hidden_dims"],
+                device,
+                train_cfg["amp_task_reward_lerp"],
+            ).to(self.device)
+            self.amp_config = {
+                "is_dual": False,
+                "data": amp_data,
+                "normalizer": amp_normalizer,
+                "discriminator": discriminator,
+            }
+
         min_std_values = list(train_cfg["min_normalized_std"])
         num_actions = self.env.num_actions
         if len(min_std_values) == 0:
@@ -204,16 +266,29 @@ class AmpOnPolicyRunner:
 
         # initialize algorithm
         alg_class = eval(self.alg_cfg.pop("class_name"))
-        self.alg: AMPPPO = alg_class(
-            policy,
-            discriminator,
-            amp_data,
-            amp_normalizer,
-            device=self.device,
-            min_std=min_std,
-            **self.alg_cfg,
-            multi_gpu_cfg=self.multi_gpu_cfg,
-        )
+        if is_dual_amp:
+            self.alg: AMPPPO = alg_class(
+                policy,
+                discriminator=None,
+                amp_data=None,
+                amp_normalizer=None,
+                device=self.device,
+                min_std=min_std,
+                amp_config=self.amp_config,
+                **self.alg_cfg,
+                multi_gpu_cfg=self.multi_gpu_cfg,
+            )
+        else:
+            self.alg: AMPPPO = alg_class(
+                policy,
+                discriminator,
+                amp_data,
+                amp_normalizer,
+                device=self.device,
+                min_std=min_std,
+                **self.alg_cfg,
+                multi_gpu_cfg=self.multi_gpu_cfg,
+            )
 
         # store training configuration
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
@@ -349,11 +424,32 @@ class AmpOnPolicyRunner:
                     if len(reset_env_ids) > 0:
                         next_amp_obs_with_term[reset_env_ids] = amp_obs[reset_env_ids]
 
-                    rewards = self.alg.discriminator.predict_amp_reward(
-                        amp_obs, next_amp_obs_with_term, rewards, normalizer=self.alg.amp_normalizer
-                    )[0]
+                    if self.amp_config["is_dual"]:
+                        moving_mask = infos["observations"]["moving_mask"].to(self.device).squeeze(-1).bool()
+                        # Compute rewards from both discriminators, then route
+                        rew_walk = self.amp_config["walk"]["discriminator"].predict_amp_reward(
+                            amp_obs, next_amp_obs_with_term, rewards,
+                            normalizer=self.amp_config["walk"]["normalizer"]
+                        )[0]
+                        rew_squat = self.amp_config["squat"]["discriminator"].predict_amp_reward(
+                            amp_obs, next_amp_obs_with_term, rewards,
+                            normalizer=self.amp_config["squat"]["normalizer"]
+                        )[0]
+                        rewards = torch.where(
+                            moving_mask.unsqueeze(-1), rew_walk.unsqueeze(-1), rew_squat.unsqueeze(-1)
+                        ).squeeze(-1)
+                    else:
+                        rewards = self.alg.discriminator.predict_amp_reward(
+                            amp_obs, next_amp_obs_with_term, rewards, normalizer=self.alg.amp_normalizer
+                        )[0]
                     amp_obs = torch.clone(next_amp_obs)
-                    self.alg.process_env_step(rewards, dones, infos, next_amp_obs_with_term)
+                    self.alg.process_env_step(
+                        rewards, dones, infos, next_amp_obs_with_term,
+                        moving_mask=(
+                            infos["observations"]["moving_mask"].to(self.device).squeeze(-1).bool()
+                            if self.amp_config["is_dual"] else None
+                        ),
+                    )
 
                     # Extract intrinsic rewards (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.alg.rnd else None
@@ -536,11 +632,22 @@ class AmpOnPolicyRunner:
         saved_dict = {
             "model_state_dict": self.alg.policy.state_dict(),
             "optimizer_state_dict": self.alg.optimizer.state_dict(),
-            "discriminator_state_dict": self.alg.discriminator.state_dict(),
-            "amp_normalizer": self.alg.amp_normalizer,
             "iter": self.current_learning_iteration,
             "infos": infos,
+            "format_version": 2,
         }
+        if self.amp_config["is_dual"]:
+            saved_dict["walk_discriminator_state_dict"] = (
+                self.amp_config["walk"]["discriminator"].state_dict()
+            )
+            saved_dict["squat_discriminator_state_dict"] = (
+                self.amp_config["squat"]["discriminator"].state_dict()
+            )
+            saved_dict["walk_amp_normalizer"] = self.amp_config["walk"]["normalizer"]
+            saved_dict["squat_amp_normalizer"] = self.amp_config["squat"]["normalizer"]
+        else:
+            saved_dict["discriminator_state_dict"] = self.alg.discriminator.state_dict()
+            saved_dict["amp_normalizer"] = self.alg.amp_normalizer
         # -- Save RND model if used
         if self.alg.rnd:
             saved_dict["rnd_state_dict"] = self.alg.rnd.state_dict()
@@ -583,10 +690,30 @@ class AmpOnPolicyRunner:
             raise KeyError(f"Checkpoint has no recognized model keys. Found: {list(loaded_dict.keys())}")
 
         # -- Load discriminator if present
-        if "discriminator_state_dict" in loaded_dict:
-            self.alg.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
-        if "amp_normalizer" in loaded_dict:
-            self.alg.amp_normalizer = loaded_dict["amp_normalizer"]
+        format_version = loaded_dict.get("format_version", 1)
+        if self.amp_config["is_dual"]:
+            if format_version >= 2 and "walk_discriminator_state_dict" in loaded_dict:
+                self.amp_config["walk"]["discriminator"].load_state_dict(
+                    loaded_dict["walk_discriminator_state_dict"]
+                )
+                self.amp_config["squat"]["discriminator"].load_state_dict(
+                    loaded_dict["squat_discriminator_state_dict"]
+                )
+                self.amp_config["walk"]["normalizer"] = loaded_dict["walk_amp_normalizer"]
+                self.amp_config["squat"]["normalizer"] = loaded_dict["squat_amp_normalizer"]
+                print("[Dual-AMP] Loaded walk + squat discriminators from v2 checkpoint.")
+            elif "discriminator_state_dict" in loaded_dict:
+                print(
+                    "[WARN] Loading v1 (single-discriminator) checkpoint into dual-AMP runner. "
+                    "Only actor/critic will be restored. Both discriminators start fresh."
+                )
+            else:
+                print("[Dual-AMP] No discriminator found in checkpoint. Starting fresh.")
+        else:
+            if "discriminator_state_dict" in loaded_dict:
+                self.alg.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
+            if "amp_normalizer" in loaded_dict:
+                self.alg.amp_normalizer = loaded_dict["amp_normalizer"]
         # -- Load RND model if used
         if self.alg.rnd:
             self.alg.rnd.load_state_dict(loaded_dict["rnd_state_dict"])
@@ -644,7 +771,11 @@ class AmpOnPolicyRunner:
     def train_mode(self):
         # -- PPO
         self.alg.policy.train()
-        self.alg.discriminator.train()
+        if self.amp_config["is_dual"]:
+            self.amp_config["walk"]["discriminator"].train()
+            self.amp_config["squat"]["discriminator"].train()
+        else:
+            self.alg.discriminator.train()
         # -- RND
         if self.alg.rnd:
             self.alg.rnd.train()
@@ -656,7 +787,11 @@ class AmpOnPolicyRunner:
     def eval_mode(self):
         # -- PPO
         self.alg.policy.eval()
-        self.alg.discriminator.eval()
+        if self.amp_config["is_dual"]:
+            self.amp_config["walk"]["discriminator"].eval()
+            self.amp_config["squat"]["discriminator"].eval()
+        else:
+            self.alg.discriminator.eval()
         # -- RND
         if self.alg.rnd:
             self.alg.rnd.eval()

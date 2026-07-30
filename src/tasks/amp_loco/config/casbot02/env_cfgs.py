@@ -112,6 +112,11 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   assert isinstance(twist_cmd, UniformVelocityCommandCfg)
   twist_cmd.viz.z_offset = 1.15
   twist_cmd.ranges.lin_vel_y = (0, 0)
+  # Dual-AMP: squat mode thresholds and height command
+  twist_cmd.linear_threshold = 0.15
+  twist_cmd.yaw_threshold = 0.3
+  twist_cmd.standing_height = 0.92
+  twist_cmd.squat_height_range = (0.62, 0.85)
   # twist_cmd.ang_vel_deadband = 0.3  # 去掉 deadband，让策略学习全范围转弯命令
 
   # CASBOT02 source XML geoms are mostly unnamed, so randomize all robot geoms
@@ -223,6 +228,33 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     joint_names=CASBOT02_23DOF_JOINT_NAMES,
     preserve_order=True,
   )
+
+  # Squat motion events (dual-AMP: squat data for env reset, not for discriminator)
+  _squat_dir = os.path.abspath(os.path.join(_motion_base, "Squat"))
+  cfg.events["init_squat_motion_loader"] = EventTermCfg(
+    func=amp_mdp.init_motion_loader,
+    mode="startup",
+    params={
+      "motion_dir": _squat_dir,
+      "recovery_dir": None,
+      "delay_reset_env_ratio": 0.0,
+      "max_delay_steps": 0,
+    },
+  )
+  cfg.events["reset_from_squat_motion"] = EventTermCfg(
+    func=amp_mdp.reset_from_motion_data,
+    mode="reset",
+    params={
+      "motion_dir": _squat_dir,
+      "asset_cfg": SceneEntityCfg(
+        "robot",
+        joint_names=CASBOT02_23DOF_JOINT_NAMES,
+        preserve_order=True,
+      ),
+    },
+  )
+
+  cfg.rewards["track_root_height"].params["use_height_command"] = True
 
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"

@@ -51,6 +51,7 @@ DEFAULT_ONNX_MODEL = ""
 DEFAULT_COMMAND_X = 0.0
 DEFAULT_COMMAND_Y = 0.0
 DEFAULT_COMMAND_YAW = 0.0
+DEFAULT_H_CMD = 0.92  # standing height for walking commands
 DEFAULT_DURATION = 6000.0
 DEFAULT_VIEW_SPEED = 1.0
 DEFAULT_DECIMATION = 4
@@ -78,7 +79,7 @@ ACTION_JOINT_INDICES = np.array(
   ],
   dtype=np.int64,
 )
-CURRENT_SINGLE_FRAME_OBS_SIZE = 45  # 3+3+3+12+12+12, no phase
+CURRENT_SINGLE_FRAME_OBS_SIZE = 46  # 3+3+4+12+12+12, command=4D with h_cmd, no phase
 COMMAND_X_RANGE = (-3.5, 5.0)
 COMMAND_Y_RANGE = (-1.0, 1.0)
 COMMAND_YAW_RANGE = (-3.14, 3.14 )
@@ -447,7 +448,7 @@ def run(model_arg: str = "") -> None:
   action_scale = make_action_scale()                    # 20-dim policy actions
   ctrl_lo, ctrl_hi = ctrl_range(model)
   command = np.array(
-    [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW],
+    [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW, DEFAULT_H_CMD],
     dtype=np.float64,
   )
 

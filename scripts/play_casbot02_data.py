@@ -131,7 +131,7 @@ def _sync_window(sim: Simulation, window_viewer) -> None:
 
 
 def main(
-  input_file: str = "src/assets/motions/casbot02/amp/WalkandRun/直行1步态.npz",
+  input_file: str = "src/assets/motions/casbot02/amp/Squat/CASBOT02_YKS_XiaDun_1000HZ.npz",
   input_fps: int = FPS_IN,
   output_fps: int = FPS_OUT,
   device: str = "cuda:0",

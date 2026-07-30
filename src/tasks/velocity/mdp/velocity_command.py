@@ -36,6 +36,10 @@ class UniformVelocityCommand(CommandTerm):
     self.robot: Entity = env.scene[cfg.entity_name]
 
     self.vel_command_b = torch.zeros(self.num_envs, 3, device=self.device)
+    self.h_cmd = torch.zeros(self.num_envs, device=self.device)
+    self.moving_mask = torch.zeros(
+      self.num_envs, dtype=torch.bool, device=self.device
+    )
     self.heading_target = torch.zeros(self.num_envs, device=self.device)
     self.heading_error = torch.zeros(self.num_envs, device=self.device)
     self.is_heading_env = torch.zeros(
@@ -53,7 +57,9 @@ class UniformVelocityCommand(CommandTerm):
 
   @property
   def command(self) -> torch.Tensor:
-    return self.vel_command_b
+    return torch.cat(
+      [self.vel_command_b, self.h_cmd.unsqueeze(-1)], dim=-1
+    )
 
   def _update_metrics(self) -> None:
     max_command_time = self.cfg.resampling_time_range[1]
@@ -81,6 +87,19 @@ class UniformVelocityCommand(CommandTerm):
       self.is_heading_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_heading_envs
     self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
 
+    # Compute moving_mask and h_cmd (dual-AMP routing)
+    self.moving_mask[env_ids] = (
+      torch.norm(self.vel_command_b[env_ids, :2], dim=-1)
+      > self.cfg.linear_threshold
+    ) | (
+      torch.abs(self.vel_command_b[env_ids, 2]) > self.cfg.yaw_threshold
+    )
+    self.h_cmd[env_ids] = torch.where(
+      self.moving_mask[env_ids],
+      torch.full((len(env_ids),), self.cfg.standing_height, device=self.device),
+      r.uniform_(*self.cfg.squat_height_range),
+    )
+
     init_vel_mask = r.uniform_(0.0, 1.0) < self.cfg.init_velocity_prob
     init_vel_env_ids = env_ids[init_vel_mask]
     if len(init_vel_env_ids) > 0:
@@ -107,6 +126,12 @@ class UniformVelocityCommand(CommandTerm):
       )
     standing_env_ids = self.is_standing_env.nonzero(as_tuple=False).flatten()
     self.vel_command_b[standing_env_ids, :] = 0.0
+    # Sync moving_mask and h_cmd for standing envs (zero velocity → squat mode).
+    if len(standing_env_ids) > 0:
+      self.moving_mask[standing_env_ids] = False
+      self.h_cmd[standing_env_ids] = torch.empty(
+        len(standing_env_ids), device=self.device
+      ).uniform_(*self.cfg.squat_height_range)
 
   # GUI.
 
@@ -125,6 +150,7 @@ class UniformVelocityCommand(CommandTerm):
       ("lin_vel_x", ranges.lin_vel_x[1]),
       ("lin_vel_y", ranges.lin_vel_y[1]),
       ("ang_vel_z", ranges.ang_vel_z[1]),
+      ("h_cmd", self.cfg.standing_height),
     ]
     sliders: list = []
 
@@ -172,7 +198,10 @@ class UniformVelocityCommand(CommandTerm):
       assert self._joystick_get_env_idx is not None
       idx = self._joystick_get_env_idx()
       for i, s in enumerate(self._joystick_sliders):
-        self.vel_command_b[idx, i] = s.value
+        if i < 3:
+          self.vel_command_b[idx, i] = s.value
+        elif i == 3:
+          self.h_cmd[idx] = s.value
 
   # Visualization.
 
@@ -254,6 +283,11 @@ class UniformVelocityCommandCfg(CommandTermCfg):
   rel_standing_envs: float = 0.0
   rel_heading_envs: float = 1.0
   init_velocity_prob: float = 0.0
+  # Dual-AMP: moving_mask and height command thresholds
+  linear_threshold: float = 0.15
+  yaw_threshold: float = 0.3
+  standing_height: float = 0.92
+  squat_height_range: tuple[float, float] = (0.62, 0.85)
 
   @dataclass
   class Ranges:

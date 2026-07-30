@@ -131,3 +131,15 @@ def robot_body_ang_vel_b(
     ).reshape(env.num_envs, num_bodies, 3)
 
     return body_ang_vel_b.reshape(env.num_envs, -1)
+
+
+def moving_mask_from_command(
+    env: ManagerBasedRlEnv,
+    command_name: str = "twist",
+) -> torch.Tensor:
+  """Compute moving_mask from velocity command for dual-AMP discriminator routing.
+
+  Returns a (num_envs, 1) float tensor: 1.0 if moving (walk mode), 0.0 if still (squat mode).
+  """
+  cmd_term = env.command_manager.get_term(command_name)
+  return cmd_term.moving_mask.float().unsqueeze(-1)

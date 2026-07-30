@@ -157,11 +157,22 @@ def track_root_height(
   mask_delay: bool = False,
   delay_env_rew_ratio: float = 1.0,
   asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+  use_height_command: bool = False,
+  command_name: str = "twist",
 ) -> torch.Tensor:
-  """Reward for tracking the commanded anchor height."""
+  """Reward for tracking the commanded anchor height.
+
+  Args:
+    use_height_command: If True, tracks h_cmd (4th dim of twist command).
+      If False (default), tracks default_root_state[:, 2] (standing height).
+  """
   asset: Entity = env.scene[asset_cfg.name]
 
-  desired_height = asset.data.default_root_state[:, 2]
+  if use_height_command:
+    cmd = env.command_manager.get_command(command_name)
+    desired_height = cmd[:, 3]
+  else:
+    desired_height = asset.data.default_root_state[:, 2]
   cur_root_height = asset.data.body_link_pos_w[:, 0, 2]
   height_error = torch.square(desired_height - cur_root_height)
   reward = torch.exp(-height_error / std**2)
