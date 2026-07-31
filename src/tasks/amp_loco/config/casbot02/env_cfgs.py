@@ -197,7 +197,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso","waist_yaw_link",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
 
-  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
+  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.0
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
 
   _motion_base = os.path.join(
@@ -227,7 +227,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 2.5#1.5
   cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.45
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
