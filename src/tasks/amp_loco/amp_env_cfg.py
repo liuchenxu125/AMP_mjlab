@@ -233,7 +233,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       interval_range_s=(1.0, 3.0),
       params={
         "velocity_range": {
-          "x": (-1.0, 1.0),
+          "x": (-0.5, 1.0),
           "y": (-0.5, 0.5),
           "z": (-0.4, 0.4),
           "roll": (-0.52, 0.52),
