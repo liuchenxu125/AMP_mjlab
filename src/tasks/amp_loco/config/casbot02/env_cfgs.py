@@ -111,7 +111,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   twist_cmd = cfg.commands["twist"]
   assert isinstance(twist_cmd, UniformVelocityCommandCfg)
   twist_cmd.viz.z_offset = 1.15
-  twist_cmd.ranges.lin_vel_y = (0, 0)
+  twist_cmd.ranges.lin_vel_y = (-0.3, 0.3)
   # twist_cmd.ang_vel_deadband = 0.3  # 去掉 deadband，让策略学习全范围转弯命令
 
   # CASBOT02 source XML geoms are mostly unnamed, so randomize all robot geoms
@@ -197,7 +197,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso","waist_yaw_link",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
 
-  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.0
+  cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
 
   _motion_base = os.path.join(
@@ -227,8 +227,8 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
-  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.45
+  cfg.rewards["track_anchor_linear_velocity"].weight = 3.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.2
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
@@ -240,7 +240,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["foot_slip"].weight = -0.35
   cfg.rewards["standing_feet_slip"] = RewardTermCfg(
     func=amp_mdp.standing_feet_slip,
-    weight=-3.0,#-2
+    weight=-2.0,#-2
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -254,7 +254,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["standing_foot_distance"] = RewardTermCfg(
     func=amp_mdp.standing_foot_distance,
-    weight=-15.0,#-10
+    weight=-10.0,#-10
     params={
       "command_name": "twist",
       "command_threshold": 0.2,
@@ -358,8 +358,8 @@ def casbot02_amp_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   if play:
     twist_cmd = cfg.commands["twist"]
     assert isinstance(twist_cmd, UniformVelocityCommandCfg)
-    twist_cmd.ranges.lin_vel_x = (0, 0.5)
-    twist_cmd.ranges.lin_vel_y = (0, 0)
-    twist_cmd.ranges.ang_vel_z = (-1.57, 1.57)
+    twist_cmd.ranges.lin_vel_x = (-1.0, 1.0)
+    twist_cmd.ranges.lin_vel_y = (-0.3, 0.3)
+    twist_cmd.ranges.ang_vel_z = (-1.6, 1.6)
 
   return cfg
