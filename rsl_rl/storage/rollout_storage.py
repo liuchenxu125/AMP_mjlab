@@ -109,8 +109,8 @@ class RolloutStorage:
         if self.privileged_observations is not None:
             self.privileged_observations[self.step].copy_(transition.privileged_observations)
         self.actions[self.step].copy_(transition.actions)
-        self.rewards[self.step].copy_(transition.rewards.view(-1, 1))
-        self.dones[self.step].copy_(transition.dones.view(-1, 1))
+        self.rewards[self.step].copy_(transition.rewards.contiguous().view(-1, 1))
+        self.dones[self.step].copy_(transition.dones.contiguous().view(-1, 1))
 
         # for distillation
         if self.training_type == "distillation":
@@ -119,7 +119,7 @@ class RolloutStorage:
         # for reinforcement learning
         if self.training_type == "rl":
             self.values[self.step].copy_(transition.values)
-            self.actions_log_prob[self.step].copy_(transition.actions_log_prob.view(-1, 1))
+            self.actions_log_prob[self.step].copy_(transition.actions_log_prob.contiguous().view(-1, 1))
             self.mu[self.step].copy_(transition.action_mean)
             self.sigma[self.step].copy_(transition.action_sigma)
 
