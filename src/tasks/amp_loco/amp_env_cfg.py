@@ -354,7 +354,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",
-        "command_threshold": 0.1,
+        "command_threshold": 0.2,
       },
     ),
     "self_collisions": RewardTermCfg(
