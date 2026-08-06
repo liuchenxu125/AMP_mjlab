@@ -194,7 +194,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     },
   )
   cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
-  cfg.events["base_com"].params["asset_cfg"].body_names = ("torso","waist_yaw_link",)
+  cfg.events["base_com"].params["asset_cfg"].body_names = ("torso",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
 
   cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
@@ -233,7 +233,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.rewards["track_anchor_angular_velocity"].weight = 2.0#2
-  cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.4
+  cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.5
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
   cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
@@ -274,7 +274,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
     func=envs_mdp.flat_orientation_l2,
-    weight=-0.5,#0.2
+    weight=-1.0,#0.2
     params={"asset_cfg": SceneEntityCfg("robot")},
   )
   cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
