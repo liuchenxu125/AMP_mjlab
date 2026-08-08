@@ -34,3 +34,21 @@ def casbot02_leg_amp_ppo_runner_cfg():
   cfg.amp_body_names = CASBOT02_23DOF_AMP_BODY_NAMES
   cfg.amp_anchor_name = "torso"
   return cfg
+
+
+def casbot02_leg_amp_dual_ppo_runner_cfg():
+  """Create RL runner config for CASBOT02 dual-AMP (forward + turn) task."""
+  cfg = g1_amp_ppo_runner_cfg()
+  cfg.experiment_name = "casbot02_leg_amp_dual"
+  cfg.amp_reward_coef = 0.2
+  cfg.save_interval = 1000
+  cfg.amp_forward_motion_files = os.path.normpath(
+    os.path.join(_MOTION_DATA_DIR, "Forward")
+  )
+  cfg.amp_turn_motion_files = os.path.normpath(
+    os.path.join(_MOTION_DATA_DIR, "TurnInPlace")
+  )
+  cfg.min_normalized_std = [0.05] * 20
+  cfg.amp_body_names = CASBOT02_23DOF_AMP_BODY_NAMES
+  cfg.amp_anchor_name = "torso"
+  return cfg

@@ -131,3 +131,20 @@ def robot_body_ang_vel_b(
     ).reshape(env.num_envs, num_bodies, 3)
 
     return body_ang_vel_b.reshape(env.num_envs, -1)
+
+
+def moving_mask_from_command(
+    env: ManagerBasedRlEnv,
+    command_name: str = "twist",
+    yaw_threshold: float = 0.2,
+) -> torch.Tensor:
+  """Compute moving_mask from yaw command for dual-AMP discriminator routing.
+
+  |yaw_cmd| > threshold → turn discriminator (0.0)
+  |yaw_cmd| ≤ threshold → forward discriminator (1.0)
+
+  This includes standing, forward, and backward in the forward discriminator.
+  """
+  cmd = env.command_manager.get_command(command_name)
+  mask = torch.abs(cmd[:, 2]) <= yaw_threshold
+  return mask.float().unsqueeze(-1)

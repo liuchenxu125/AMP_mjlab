@@ -64,8 +64,12 @@ class ReplayBuffer:
 
     def feed_forward_generator(self, num_mini_batch, mini_batch_size):
         for _ in range(num_mini_batch):
-            sample_idxs = np.random.choice(self.num_samples, size=mini_batch_size)
-            yield (
-                self.states[sample_idxs].to(self.device),
-                self.next_states[sample_idxs].to(self.device),
-            )
+            if self.num_samples == 0:
+                dummy = torch.zeros(1, self.states.shape[1], device=self.device)
+                yield (dummy, dummy)
+            else:
+                sample_idxs = np.random.choice(self.num_samples, size=mini_batch_size)
+                yield (
+                    self.states[sample_idxs].to(self.device),
+                    self.next_states[sample_idxs].to(self.device),
+                )

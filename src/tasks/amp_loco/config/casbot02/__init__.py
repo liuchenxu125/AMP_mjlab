@@ -45,3 +45,13 @@ register_mjlab_task(
   rl_cfg=casbot02_leg_amp_ppo_runner_cfg(),
   runner_cls=AMPOnPolicyRunner,
 )
+
+from .leg_rl_cfg import casbot02_leg_amp_dual_ppo_runner_cfg
+
+register_mjlab_task(
+  task_id="Casbot02-Leg-AMP-Dual",
+  env_cfg=casbot02_leg_amp_flat_env_cfg(),
+  play_env_cfg=casbot02_leg_amp_flat_env_cfg(play=True),
+  rl_cfg=casbot02_leg_amp_dual_ppo_runner_cfg(),
+  runner_cls=AMPOnPolicyRunner,
+)

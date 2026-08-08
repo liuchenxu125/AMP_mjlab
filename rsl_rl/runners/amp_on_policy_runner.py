@@ -161,59 +161,56 @@ class AmpOnPolicyRunner:
             self.alg_cfg["symmetry_cfg"]["_env"] = env
 
         # init amp loader
-        # Resolve all body names from the environment's robot entity
         robot_entity = self.env.unwrapped.scene["robot"]
         all_body_names = robot_entity.body_names
-        amp_data = AMPLoader(
-            motion_file=train_cfg["amp_motion_files"],
-            body_names=train_cfg["amp_body_names"],
-            anchor_name=train_cfg["amp_anchor_name"],
-            all_body_names=all_body_names,
-            device=self.device,
-        )
-        amp_normalizer = Normalizer(amp_data.observation_dim)
-        discriminator = Discriminator(
-            amp_data.observation_dim * 2,
-            train_cfg["amp_reward_coef"],
-            train_cfg["amp_discr_hidden_dims"],
-            device,
-            train_cfg["amp_task_reward_lerp"],
-        ).to(self.device)
+
+        # Check for dual-AMP configuration
+        fwd_motion = train_cfg.get("amp_forward_motion_files", "")
+        turn_motion = train_cfg.get("amp_turn_motion_files", "")
+        is_dual_amp = bool(fwd_motion and turn_motion)
+
+        if is_dual_amp:
+            print("[Dual-AMP] Configuring forward + turn discriminators.")
+            fwd_amp_data = AMPLoader(motion_file=fwd_motion, body_names=train_cfg["amp_body_names"],
+                                      anchor_name=train_cfg["amp_anchor_name"], all_body_names=all_body_names, device=self.device)
+            fwd_normalizer = Normalizer(fwd_amp_data.observation_dim)
+            fwd_disc = Discriminator(fwd_amp_data.observation_dim * 2, train_cfg["amp_reward_coef"],
+                                      train_cfg["amp_discr_hidden_dims"], device, train_cfg["amp_task_reward_lerp"]).to(self.device)
+            turn_amp_data = AMPLoader(motion_file=turn_motion, body_names=train_cfg["amp_body_names"],
+                                       anchor_name=train_cfg["amp_anchor_name"], all_body_names=all_body_names, device=self.device)
+            turn_normalizer = Normalizer(turn_amp_data.observation_dim)
+            turn_disc = Discriminator(turn_amp_data.observation_dim * 2, train_cfg["amp_reward_coef"],
+                                       train_cfg["amp_discr_hidden_dims"], device, train_cfg["amp_task_reward_lerp"]).to(self.device)
+            self.amp_config = {"is_dual": True, "forward": {"data": fwd_amp_data, "normalizer": fwd_normalizer, "discriminator": fwd_disc},
+                                "turn": {"data": turn_amp_data, "normalizer": turn_normalizer, "discriminator": turn_disc}}
+        else:
+            print("[AMP] Configuring single discriminator.")
+            amp_data = AMPLoader(motion_file=train_cfg["amp_motion_files"], body_names=train_cfg["amp_body_names"],
+                                  anchor_name=train_cfg["amp_anchor_name"], all_body_names=all_body_names, device=self.device)
+            amp_normalizer = Normalizer(amp_data.observation_dim)
+            discriminator = Discriminator(amp_data.observation_dim * 2, train_cfg["amp_reward_coef"],
+                                           train_cfg["amp_discr_hidden_dims"], device, train_cfg["amp_task_reward_lerp"]).to(self.device)
+            self.amp_config = {"is_dual": False, "data": amp_data, "normalizer": amp_normalizer, "discriminator": discriminator}
+
         min_std_values = list(train_cfg["min_normalized_std"])
         num_actions = self.env.num_actions
         if len(min_std_values) == 0:
             min_std_values = [0.0] * num_actions
-            print(f"[AMPPPO] Empty min_normalized_std. Falling back to {num_actions} zeros.")
         elif len(min_std_values) == 1:
             min_std_values = min_std_values * num_actions
         elif len(min_std_values) < num_actions:
-            pad_value = min_std_values[-1]
-            min_std_values = min_std_values + [pad_value] * (num_actions - len(min_std_values))
-            print(
-                f"[AMPPPO] min_normalized_std has {len(train_cfg['min_normalized_std'])} values, "
-                f"padded to {num_actions} with {pad_value}."
-            )
+            min_std_values = min_std_values + [min_std_values[-1]] * (num_actions - len(min_std_values))
         elif len(min_std_values) > num_actions:
             min_std_values = min_std_values[:num_actions]
-            print(
-                f"[AMPPPO] min_normalized_std has {len(train_cfg['min_normalized_std'])} values, "
-                f"truncated to {num_actions}."
-            )
-
         min_std = torch.tensor(min_std_values, device=self.device, requires_grad=False)
 
-        # initialize algorithm
         alg_class = eval(self.alg_cfg.pop("class_name"))
-        self.alg: AMPPPO = alg_class(
-            policy,
-            discriminator,
-            amp_data,
-            amp_normalizer,
-            device=self.device,
-            min_std=min_std,
-            **self.alg_cfg,
-            multi_gpu_cfg=self.multi_gpu_cfg,
-        )
+        if is_dual_amp:
+            self.alg: AMPPPO = alg_class(policy, discriminator=None, amp_data=None, amp_normalizer=None, device=self.device,
+                                          min_std=min_std, amp_config=self.amp_config, **self.alg_cfg, multi_gpu_cfg=self.multi_gpu_cfg)
+        else:
+            self.alg: AMPPPO = alg_class(policy, discriminator, amp_data, amp_normalizer, device=self.device,
+                                          min_std=min_std, **self.alg_cfg, multi_gpu_cfg=self.multi_gpu_cfg)
 
         # store training configuration
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
@@ -349,11 +346,19 @@ class AmpOnPolicyRunner:
                     if len(reset_env_ids) > 0:
                         next_amp_obs_with_term[reset_env_ids] = amp_obs[reset_env_ids]
 
-                    rewards = self.alg.discriminator.predict_amp_reward(
-                        amp_obs, next_amp_obs_with_term, rewards, normalizer=self.alg.amp_normalizer
-                    )[0]
+                    if self.amp_config["is_dual"]:
+                        moving_mask = infos["observations"]["moving_mask"].to(self.device).squeeze(-1).bool()
+                        rew_fwd = self.amp_config["forward"]["discriminator"].predict_amp_reward(
+                            amp_obs, next_amp_obs_with_term, rewards, normalizer=self.amp_config["forward"]["normalizer"])[0]
+                        rew_turn = self.amp_config["turn"]["discriminator"].predict_amp_reward(
+                            amp_obs, next_amp_obs_with_term, rewards, normalizer=self.amp_config["turn"]["normalizer"])[0]
+                        rewards = torch.where(moving_mask.unsqueeze(-1), rew_fwd.unsqueeze(-1), rew_turn.unsqueeze(-1)).squeeze(-1)
+                    else:
+                        rewards = self.alg.discriminator.predict_amp_reward(
+                            amp_obs, next_amp_obs_with_term, rewards, normalizer=self.alg.amp_normalizer)[0]
                     amp_obs = torch.clone(next_amp_obs)
-                    self.alg.process_env_step(rewards, dones, infos, next_amp_obs_with_term)
+                    self.alg.process_env_step(rewards, dones, infos, next_amp_obs_with_term,
+                        moving_mask=(infos["observations"]["moving_mask"].to(self.device).squeeze(-1).bool() if self.amp_config["is_dual"] else None))
 
                     # Extract intrinsic rewards (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.alg.rnd else None
@@ -536,11 +541,18 @@ class AmpOnPolicyRunner:
         saved_dict = {
             "model_state_dict": self.alg.policy.state_dict(),
             "optimizer_state_dict": self.alg.optimizer.state_dict(),
-            "discriminator_state_dict": self.alg.discriminator.state_dict(),
-            "amp_normalizer": self.alg.amp_normalizer,
             "iter": self.current_learning_iteration,
             "infos": infos,
+            "format_version": 2,
         }
+        if self.amp_config["is_dual"]:
+            saved_dict["forward_discriminator_state_dict"] = self.amp_config["forward"]["discriminator"].state_dict()
+            saved_dict["turn_discriminator_state_dict"] = self.amp_config["turn"]["discriminator"].state_dict()
+            saved_dict["forward_amp_normalizer"] = self.amp_config["forward"]["normalizer"]
+            saved_dict["turn_amp_normalizer"] = self.amp_config["turn"]["normalizer"]
+        else:
+            saved_dict["discriminator_state_dict"] = self.alg.discriminator.state_dict()
+            saved_dict["amp_normalizer"] = self.alg.amp_normalizer
         # -- Save RND model if used
         if self.alg.rnd:
             saved_dict["rnd_state_dict"] = self.alg.rnd.state_dict()
@@ -583,10 +595,20 @@ class AmpOnPolicyRunner:
             raise KeyError(f"Checkpoint has no recognized model keys. Found: {list(loaded_dict.keys())}")
 
         # -- Load discriminator if present
-        if "discriminator_state_dict" in loaded_dict:
-            self.alg.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
-        if "amp_normalizer" in loaded_dict:
-            self.alg.amp_normalizer = loaded_dict["amp_normalizer"]
+        fmt_ver = loaded_dict.get("format_version", 1)
+        if self.amp_config["is_dual"]:
+            if fmt_ver >= 2 and "forward_discriminator_state_dict" in loaded_dict:
+                self.amp_config["forward"]["discriminator"].load_state_dict(loaded_dict["forward_discriminator_state_dict"])
+                self.amp_config["turn"]["discriminator"].load_state_dict(loaded_dict["turn_discriminator_state_dict"])
+                self.amp_config["forward"]["normalizer"] = loaded_dict["forward_amp_normalizer"]
+                self.amp_config["turn"]["normalizer"] = loaded_dict["turn_amp_normalizer"]
+            elif "discriminator_state_dict" in loaded_dict:
+                print("[WARN] v1 checkpoint in dual-AMP mode. Only actor/critic loaded.")
+        else:
+            if "discriminator_state_dict" in loaded_dict:
+                self.alg.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
+            if "amp_normalizer" in loaded_dict:
+                self.alg.amp_normalizer = loaded_dict["amp_normalizer"]
         # -- Load RND model if used
         if self.alg.rnd:
             self.alg.rnd.load_state_dict(loaded_dict["rnd_state_dict"])
@@ -644,7 +666,11 @@ class AmpOnPolicyRunner:
     def train_mode(self):
         # -- PPO
         self.alg.policy.train()
-        self.alg.discriminator.train()
+        if self.amp_config["is_dual"]:
+            self.amp_config["forward"]["discriminator"].train()
+            self.amp_config["turn"]["discriminator"].train()
+        else:
+            self.alg.discriminator.train()
         # -- RND
         if self.alg.rnd:
             self.alg.rnd.train()
@@ -656,7 +682,11 @@ class AmpOnPolicyRunner:
     def eval_mode(self):
         # -- PPO
         self.alg.policy.eval()
-        self.alg.discriminator.eval()
+        if self.amp_config["is_dual"]:
+            self.amp_config["forward"]["discriminator"].eval()
+            self.amp_config["turn"]["discriminator"].eval()
+        else:
+            self.alg.discriminator.eval()
         # -- RND
         if self.alg.rnd:
             self.alg.rnd.eval()

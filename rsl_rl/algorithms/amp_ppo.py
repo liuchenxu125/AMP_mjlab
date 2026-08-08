@@ -66,6 +66,8 @@ class AMPPPO:
         # Distributed training parameters
         multi_gpu_cfg: dict | None = None,
         share_cnn_encoders=False,
+        # Dual-AMP configuration (None for single-AMP)
+        amp_config: dict | None = None,
     ):
         # device-related parameters
         self.device = device
@@ -113,22 +115,49 @@ class AMPPPO:
         # Discriminator components
         self.amploss_coef = 1.0
         self.min_std = min_std
-        self.discriminator = discriminator
-        self.discriminator.to(self.device)
         self.amp_transition = RolloutStorage.Transition()
-        self.amp_storage = ReplayBuffer(discriminator.input_dim // 2, amp_replay_buffer_size, device)
-        self.amp_data = amp_data
-        self.amp_normalizer = amp_normalizer
+
+        if amp_config is not None and amp_config.get("is_dual"):
+            self.is_dual_amp = True
+            self.discriminators = {
+                "forward": amp_config["forward"]["discriminator"],
+                "turn": amp_config["turn"]["discriminator"],
+            }
+            self.discriminators["forward"].to(self.device)
+            self.discriminators["turn"].to(self.device)
+            self.amp_storages = {
+                "forward": ReplayBuffer(self.discriminators["forward"].input_dim // 2, amp_replay_buffer_size, device),
+                "turn": ReplayBuffer(self.discriminators["turn"].input_dim // 2, amp_replay_buffer_size, device),
+            }
+            self.amp_datas = {"forward": amp_config["forward"]["data"], "turn": amp_config["turn"]["data"]}
+            self.amp_normalizers = {"forward": amp_config["forward"]["normalizer"], "turn": amp_config["turn"]["normalizer"]}
+            self.discriminator = self.discriminators["forward"]
+            self.amp_normalizer = self.amp_normalizers["forward"]
+        else:
+            self.is_dual_amp = False
+            self.discriminator = discriminator
+            self.discriminator.to(self.device)
+            self.amp_storage = ReplayBuffer(discriminator.input_dim // 2, amp_replay_buffer_size, device)
+            self.amp_data = amp_data
+            self.amp_normalizer = amp_normalizer
 
         # PPO components
         self.policy = policy
         self.policy.to(self.device)
-        # Create optimizer
-        params = [
-            {"params": self.policy.parameters(), "name": "policy"},
-            {"params": self.discriminator.trunk.parameters(), "weight_decay": 10e-4, "name": "amp_trunk"},
-            {"params": self.discriminator.amp_linear.parameters(), "weight_decay": 10e-2, "name": "amp_head"},
-        ]
+        if self.is_dual_amp:
+            params = [
+                {"params": self.policy.parameters(), "name": "policy"},
+                {"params": self.discriminators["forward"].trunk.parameters(), "weight_decay": 10e-4, "name": "fwd_amp_trunk"},
+                {"params": self.discriminators["forward"].amp_linear.parameters(), "weight_decay": 10e-2, "name": "fwd_amp_head"},
+                {"params": self.discriminators["turn"].trunk.parameters(), "weight_decay": 10e-4, "name": "turn_amp_trunk"},
+                {"params": self.discriminators["turn"].amp_linear.parameters(), "weight_decay": 10e-2, "name": "turn_amp_head"},
+            ]
+        else:
+            params = [
+                {"params": self.policy.parameters(), "name": "policy"},
+                {"params": self.discriminator.trunk.parameters(), "weight_decay": 10e-4, "name": "amp_trunk"},
+                {"params": self.discriminator.amp_linear.parameters(), "weight_decay": 10e-2, "name": "amp_head"},
+            ]
         self.optimizer = optim.Adam(params, lr=learning_rate)
         # Create rollout storage
         self.storage: RolloutStorage = None  # type: ignore
@@ -184,7 +213,7 @@ class AMPPPO:
         self.amp_transition.observations = amp_obs
         return self.transition.actions
 
-    def process_env_step(self, rewards, dones, infos, amp_obs):
+    def process_env_step(self, rewards, dones, infos, amp_obs, moving_mask=None):
         # Record the rewards and dones
         # Note: we clone here because later on we bootstrap the rewards based on timeouts
         self.transition.rewards = rewards.clone()
@@ -209,7 +238,17 @@ class AMPPPO:
             )
 
         # record the transition
-        self.amp_storage.insert(self.amp_transition.observations, amp_obs)
+        if self.is_dual_amp and moving_mask is not None:
+            fwd_mask = moving_mask.bool().flatten()
+            turn_mask = ~fwd_mask
+            fwd_ids = fwd_mask.nonzero(as_tuple=False).flatten()
+            turn_ids = turn_mask.nonzero(as_tuple=False).flatten()
+            if len(fwd_ids) > 0:
+                self.amp_storages["forward"].insert(self.amp_transition.observations[fwd_ids], amp_obs[fwd_ids])
+            if len(turn_ids) > 0:
+                self.amp_storages["turn"].insert(self.amp_transition.observations[turn_ids], amp_obs[turn_ids])
+        else:
+            self.amp_storage.insert(self.amp_transition.observations, amp_obs)
         self.storage.add_transitions(self.transition)
         self.transition.clear()
         self.amp_transition.clear()
@@ -249,17 +288,41 @@ class AMPPPO:
         else:
             generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
 
-        amp_policy_generator = self.amp_storage.feed_forward_generator(
-            self.num_learning_epochs * self.num_mini_batches,
-            self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
-        )
-        amp_expert_generator = self.amp_data.feed_forward_generator(
-            self.num_learning_epochs * self.num_mini_batches,
-            self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
-        )
+        if self.is_dual_amp:
+            fwd_pol_gen = self.amp_storages["forward"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            fwd_exp_gen = self.amp_datas["forward"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            turn_pol_gen = self.amp_storages["turn"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            turn_exp_gen = self.amp_datas["turn"].feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_zipper = zip(generator, fwd_pol_gen, fwd_exp_gen, turn_pol_gen, turn_exp_gen)
+        else:
+            amp_policy_generator = self.amp_storage.feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_expert_generator = self.amp_data.feed_forward_generator(
+                self.num_learning_epochs * self.num_mini_batches,
+                self.storage.num_envs * self.storage.num_transitions_per_env // self.num_mini_batches,
+            )
+            amp_zipper = zip(generator, amp_policy_generator, amp_expert_generator)
 
         # iterate over batches
-        for sample, sample_amp_policy, sample_amp_expert in zip(generator, amp_policy_generator, amp_expert_generator):
+        for amp_items in amp_zipper:
+            if self.is_dual_amp:
+                sample, sample_amp_pol_fwd, sample_amp_exp_fwd, sample_amp_pol_turn, sample_amp_exp_turn = amp_items
+            else:
+                sample, sample_amp_policy, sample_amp_expert = amp_items
             (
                 obs_batch,
                 critic_obs_batch,
@@ -433,21 +496,34 @@ class AMPPPO:
                 rnd_loss = mseloss(predicted_embedding, target_embedding)
 
             # Discriminator loss.
-            policy_state, policy_next_state = sample_amp_policy
-            expert_state, expert_next_state = sample_amp_expert
-            if self.amp_normalizer is not None:
-                with torch.no_grad():
-                    policy_state = self.amp_normalizer.normalize_torch(policy_state, self.device)
-                    policy_next_state = self.amp_normalizer.normalize_torch(policy_next_state, self.device)
-                    expert_state = self.amp_normalizer.normalize_torch(expert_state, self.device)
-                    expert_next_state = self.amp_normalizer.normalize_torch(expert_next_state, self.device)
-            policy_d = self.discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
-            expert_d = self.discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
-            expert_loss = torch.nn.MSELoss()(expert_d, torch.ones(expert_d.size(), device=self.device))
-            policy_loss = torch.nn.MSELoss()(policy_d, -1 * torch.ones(policy_d.size(), device=self.device))
-            amp_loss = 0.5 * (expert_loss + policy_loss)
-            grad_pen_loss = self.discriminator.compute_grad_pen(*sample_amp_expert, lambda_=10)
-            loss += self.amploss_coef * amp_loss + self.amploss_coef * grad_pen_loss
+            if self.is_dual_amp:
+                f_pol_s, f_pol_ns = sample_amp_pol_fwd
+                f_exp_s, f_exp_ns = sample_amp_exp_fwd
+                f_amp_loss, f_gp, f_pol_d, f_exp_d = self._compute_amp_loss(
+                    f_pol_s, f_pol_ns, f_exp_s, f_exp_ns, self.discriminators["forward"], self.amp_normalizers["forward"])
+                t_pol_s, t_pol_ns = sample_amp_pol_turn
+                t_exp_s, t_exp_ns = sample_amp_exp_turn
+                t_amp_loss, t_gp, t_pol_d, t_exp_d = self._compute_amp_loss(
+                    t_pol_s, t_pol_ns, t_exp_s, t_exp_ns, self.discriminators["turn"], self.amp_normalizers["turn"])
+                amp_loss = f_amp_loss + t_amp_loss
+                grad_pen_loss = f_gp + t_gp
+                loss += self.amploss_coef * amp_loss + self.amploss_coef * grad_pen_loss
+            else:
+                policy_state, policy_next_state = sample_amp_policy
+                expert_state, expert_next_state = sample_amp_expert
+                if self.amp_normalizer is not None:
+                    with torch.no_grad():
+                        policy_state = self.amp_normalizer.normalize_torch(policy_state, self.device)
+                        policy_next_state = self.amp_normalizer.normalize_torch(policy_next_state, self.device)
+                        expert_state = self.amp_normalizer.normalize_torch(expert_state, self.device)
+                        expert_next_state = self.amp_normalizer.normalize_torch(expert_next_state, self.device)
+                policy_d = self.discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
+                expert_d = self.discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
+                expert_loss = torch.nn.MSELoss()(expert_d, torch.ones(expert_d.size(), device=self.device))
+                policy_loss = torch.nn.MSELoss()(policy_d, -1 * torch.ones(policy_d.size(), device=self.device))
+                amp_loss = 0.5 * (expert_loss + policy_loss)
+                grad_pen_loss = self.discriminator.compute_grad_pen(*sample_amp_expert, lambda_=10)
+                loss += self.amploss_coef * amp_loss + self.amploss_coef * grad_pen_loss
 
             # Compute the gradients
             # -- For PPO
@@ -494,7 +570,14 @@ class AMPPPO:
             if self.rnd_optimizer:
                 self.rnd_optimizer.step()
 
-            if self.amp_normalizer is not None:
+            if self.is_dual_amp:
+                if self.amp_normalizers["forward"] is not None:
+                    self.amp_normalizers["forward"].update(f_pol_s.cpu().numpy())
+                    self.amp_normalizers["forward"].update(f_exp_s.cpu().numpy())
+                if self.amp_normalizers["turn"] is not None:
+                    self.amp_normalizers["turn"].update(t_pol_s.cpu().numpy())
+                    self.amp_normalizers["turn"].update(t_exp_s.cpu().numpy())
+            elif self.amp_normalizer is not None:
                 self.amp_normalizer.update(policy_state.cpu().numpy())
                 self.amp_normalizer.update(expert_state.cpu().numpy())
 
@@ -505,8 +588,12 @@ class AMPPPO:
             mean_entropy += entropy_batch.mean().item()
             mean_amp_loss += amp_loss.item()
             mean_grad_pen_loss += grad_pen_loss.item()
-            mean_policy_pred += policy_d.mean().item()
-            mean_expert_pred += expert_d.mean().item()
+            if self.is_dual_amp:
+                mean_policy_pred += (f_pol_d.mean().item() + t_pol_d.mean().item()) / 2.0
+                mean_expert_pred += (f_exp_d.mean().item() + t_exp_d.mean().item()) / 2.0
+            else:
+                mean_policy_pred += policy_d.mean().item()
+                mean_expert_pred += expert_d.mean().item()
             # -- RND loss
             if mean_rnd_loss is not None:
                 mean_rnd_loss += rnd_loss.item()
@@ -571,6 +658,24 @@ class AMPPPO:
         """Return the policy module."""
         return self.policy
 
+    @staticmethod
+    def _compute_amp_loss(policy_state, policy_next_state, expert_state, expert_next_state, discriminator, normalizer):
+        """Compute AMP loss for a single discriminator."""
+        if normalizer is not None:
+            with torch.no_grad():
+                device = policy_state.device
+                policy_state = normalizer.normalize_torch(policy_state, device)
+                policy_next_state = normalizer.normalize_torch(policy_next_state, device)
+                expert_state = normalizer.normalize_torch(expert_state, device)
+                expert_next_state = normalizer.normalize_torch(expert_next_state, device)
+        policy_d = discriminator(torch.cat([policy_state, policy_next_state], dim=-1))
+        expert_d = discriminator(torch.cat([expert_state, expert_next_state], dim=-1))
+        expert_loss = torch.nn.MSELoss()(expert_d, torch.ones(expert_d.size(), device=policy_d.device))
+        policy_loss = torch.nn.MSELoss()(policy_d, -1 * torch.ones(policy_d.size(), device=policy_d.device))
+        amp_loss = 0.5 * (expert_loss + policy_loss)
+        grad_pen_loss = discriminator.compute_grad_pen(expert_state, expert_next_state, lambda_=10)
+        return amp_loss, grad_pen_loss, policy_d, expert_d
+
     def save(self) -> dict:
         """Serialize algorithm state for checkpointing (v5 format)."""
         sd = self.policy.state_dict()
@@ -586,9 +691,15 @@ class AMPPPO:
             "actor_state_dict": actor_sd,
             "critic_state_dict": critic_sd,
             "optimizer_state_dict": self.optimizer.state_dict(),
-            "discriminator_state_dict": self.discriminator.state_dict(),
-            "amp_normalizer": self.amp_normalizer,
         }
+        if self.is_dual_amp:
+            result["forward_discriminator_state_dict"] = self.discriminators["forward"].state_dict()
+            result["turn_discriminator_state_dict"] = self.discriminators["turn"].state_dict()
+            result["forward_amp_normalizer"] = self.amp_normalizers["forward"]
+            result["turn_amp_normalizer"] = self.amp_normalizers["turn"]
+        else:
+            result["discriminator_state_dict"] = self.discriminator.state_dict()
+            result["amp_normalizer"] = self.amp_normalizer
         return result
 
     def load(self, loaded_dict: dict, load_cfg: dict | None = None, strict: bool = True) -> bool:
@@ -625,10 +736,19 @@ class AMPPPO:
         self.policy.load_state_dict(sd, strict=strict)
 
         # Load discriminator and AMP normalizer if present
-        if "discriminator_state_dict" in loaded_dict:
-            self.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
-        if "amp_normalizer" in loaded_dict:
-            self.amp_normalizer = loaded_dict["amp_normalizer"]
+        if self.is_dual_amp:
+            if "forward_discriminator_state_dict" in loaded_dict:
+                self.discriminators["forward"].load_state_dict(loaded_dict["forward_discriminator_state_dict"])
+                self.discriminators["turn"].load_state_dict(loaded_dict["turn_discriminator_state_dict"])
+                self.amp_normalizers["forward"] = loaded_dict.get("forward_amp_normalizer", self.amp_normalizers["forward"])
+                self.amp_normalizers["turn"] = loaded_dict.get("turn_amp_normalizer", self.amp_normalizers["turn"])
+            elif "discriminator_state_dict" in loaded_dict:
+                print("[WARN] v1 checkpoint in dual-AMP mode. Only actor/critic loaded.")
+        else:
+            if "discriminator_state_dict" in loaded_dict:
+                self.discriminator.load_state_dict(loaded_dict["discriminator_state_dict"])
+            if "amp_normalizer" in loaded_dict:
+                self.amp_normalizer = loaded_dict["amp_normalizer"]
 
         return load_actor and load_critic
 
