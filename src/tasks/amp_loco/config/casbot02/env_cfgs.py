@@ -227,7 +227,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 3.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 2.5#1.5
   cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.3
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
