@@ -175,7 +175,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       # The source URDF base_link is named torso in the MuJoCo model.
       "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
-      "ranges": (-1.0, 1.0),
+      "ranges": (-2.0, 2.0),
       "operation": "add",
       "distribution": "uniform",
     },
@@ -227,12 +227,12 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 2.5#1.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 2.2#1.5
   cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.3
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_angular_velocity"].weight = 2.0#2
+  cfg.rewards["track_anchor_angular_velocity"].weight = 2.2#2
   cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.5
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
