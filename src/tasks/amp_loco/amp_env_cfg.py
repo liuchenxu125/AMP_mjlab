@@ -278,9 +278,9 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
         "ranges": {
-          0: (-0.025, 0.025),
-          1: (-0.025, 0.025),
-          2: (-0.03, 0.03),
+          0: (-0.06, 0.06),
+          1: (-0.06, 0.06),
+          2: (-0.06, 0.06),
         },
       },
     ),

@@ -158,17 +158,17 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       "distribution": "uniform",
     },
   )
-  cfg.events["joint_armature"] = EventTermCfg(
-    mode="startup",
-    func=envs_mdp.dr.joint_armature,
-    params={
-      "asset_cfg": SceneEntityCfg("robot"),
-      "ranges": (0.95, 1.05),
-      "operation": "scale",
-      "distribution": "uniform",
-      "shared_random": False,
-    },
-  )
+  # cfg.events["joint_armature"] = EventTermCfg(
+  #   mode="startup",
+  #   func=envs_mdp.dr.joint_armature,
+  #   params={
+  #     "asset_cfg": SceneEntityCfg("robot"),
+  #     "ranges": (0.95, 1.05),
+  #     "operation": "scale",
+  #     "distribution": "uniform",
+  #     "shared_random": False,
+  #   },
+  # )
   cfg.events["base_mass"] = EventTermCfg(
     mode="startup",
     func=envs_mdp.dr.body_mass,
@@ -194,7 +194,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     },
   )
   cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
-  cfg.events["base_com"].params["asset_cfg"].body_names = ("torso","waist_yaw_link",)
+  cfg.events["base_com"].params["asset_cfg"].body_names = ("torso",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
 
   cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
@@ -274,7 +274,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
     func=envs_mdp.flat_orientation_l2,
-    weight=-0.5,#0.2
+    weight=-2,#0.2
     params={"asset_cfg": SceneEntityCfg("robot")},
   )
   cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
