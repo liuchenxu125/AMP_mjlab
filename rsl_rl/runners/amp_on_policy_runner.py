@@ -347,7 +347,9 @@ class AmpOnPolicyRunner:
                         next_amp_obs_with_term[reset_env_ids] = amp_obs[reset_env_ids]
 
                     if self.amp_config["is_dual"]:
-                        moving_mask = infos["observations"]["moving_mask"].to(self.device).squeeze(-1).bool()
+                        # Compute moving_mask directly from command (yaw>0.2 -> turn discriminator)
+                        cmd = self.env.unwrapped.command_manager.get_command("twist")
+                        moving_mask = (torch.abs(cmd[:, 2]) <= 0.2).to(self.device)
                         rew_fwd = self.amp_config["forward"]["discriminator"].predict_amp_reward(
                             amp_obs, next_amp_obs_with_term, rewards, normalizer=self.amp_config["forward"]["normalizer"])[0]
                         rew_turn = self.amp_config["turn"]["discriminator"].predict_amp_reward(
@@ -358,7 +360,7 @@ class AmpOnPolicyRunner:
                             amp_obs, next_amp_obs_with_term, rewards, normalizer=self.alg.amp_normalizer)[0]
                     amp_obs = torch.clone(next_amp_obs)
                     self.alg.process_env_step(rewards, dones, infos, next_amp_obs_with_term,
-                        moving_mask=(infos["observations"]["moving_mask"].to(self.device).squeeze(-1).bool() if self.amp_config["is_dual"] else None))
+                        moving_mask=(moving_mask.bool() if self.amp_config["is_dual"] else None))
 
                     # Extract intrinsic rewards (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.alg.rnd else None

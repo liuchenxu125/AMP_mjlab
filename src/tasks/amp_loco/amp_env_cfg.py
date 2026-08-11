@@ -154,17 +154,6 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       enable_corruption=False,
       history_length=1,
     ),
-    "moving_mask": ObservationGroupCfg(
-      terms={
-        "mask": ObservationTermCfg(
-          func=mdp.moving_mask_from_command,
-          params={"command_name": "twist", "yaw_threshold": 0.2},
-        ),
-      },
-      concatenate_terms=True,
-      enable_corruption=False,
-      history_length=1,
-    ),
   }
 
   ##
