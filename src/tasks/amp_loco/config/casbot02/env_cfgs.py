@@ -272,6 +272,17 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     weight=-0.1,
     params={"sensor_name": self_collision_cfg.name, "force_threshold": 10.0},
   )
+  cfg.rewards["feet_air_time"] = RewardTermCfg(
+    func=mdp.feet_air_time,
+    weight=1.0,
+    params={
+      "sensor_name": "feet_ground_contact",
+      "threshold_min": 0.05,
+      "threshold_max": 0.5,
+      "command_name": "twist",
+      "command_threshold": 0.2,
+    },
+  )
   cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
     func=envs_mdp.flat_orientation_l2,
     weight=-1,#0.2
