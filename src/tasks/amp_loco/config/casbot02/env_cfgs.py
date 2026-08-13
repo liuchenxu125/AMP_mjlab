@@ -274,7 +274,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["feet_air_time"] = RewardTermCfg(
     func=mdp.feet_air_time,
-    weight=1.0,
+    weight=0.1,
     params={
       "sensor_name": "feet_ground_contact",
       "threshold_min": 0.05,
