@@ -278,9 +278,9 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
         "ranges": {
-          0: (-0.06, 0.06),
-          1: (-0.06, 0.06),
-          2: (-0.06, 0.06),
+          0: (-0.03, 0.03),
+          1: (-0.03, 0.03),
+          2: (-0.03, 0.03),
         },
       },
     ),
@@ -330,7 +330,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "track_root_height": RewardTermCfg(
       func=mdp.track_root_height,
-      weight=1.0,
+      weight=2.0,
         params={"std": 0.3,
                 "mask_delay": True,
                 "delay_env_rew_ratio": 3.5},
@@ -361,7 +361,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-8e-3,#-5-2
+      weight=-3e-3,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",

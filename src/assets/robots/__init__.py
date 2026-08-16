@@ -31,6 +31,9 @@ from .casbot02.casbot02_constants import (
   CASBOT02_23DOF_AMP_BODY_NAMES as CASBOT02_23DOF_AMP_BODY_NAMES,
 )
 from .casbot02.casbot02_constants import (
+  CASBOT02_20DOF_AMP_BODY_NAMES as CASBOT02_20DOF_AMP_BODY_NAMES,
+)
+from .casbot02.casbot02_constants import (
   CASBOT02_23DOF_JOINT_NAMES as CASBOT02_23DOF_JOINT_NAMES,
 )
 from .casbot02.casbot02_constants import (

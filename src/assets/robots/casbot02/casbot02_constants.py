@@ -66,6 +66,22 @@ CASBOT02_23DOF_AMP_BODY_NAMES: tuple[str, ...] = (
   "right_wrist_yaw_link",
 )
 
+# AMP body names for the 20-action policy: the two wrist-yaw bodies are dropped
+# because those joints are held at home pose and are not controlled by the policy.
+CASBOT02_20DOF_AMP_BODY_NAMES: tuple[str, ...] = (
+  "torso",
+  "leg_l2_link",
+  "leg_l4_link",
+  "leg_l6_link",
+  "leg_r2_link",
+  "leg_r4_link",
+  "leg_r6_link",
+  "left_shoulder_roll_link",
+  "left_elbow_pitch_link",
+  "right_shoulder_roll_link",
+  "right_elbow_pitch_link",
+)
+
 CASBOT02_LEG_AMP_BODY_NAMES: tuple[str, ...] = (
   "torso",
   "leg_l2_link",

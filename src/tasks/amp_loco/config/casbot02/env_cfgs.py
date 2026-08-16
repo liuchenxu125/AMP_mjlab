@@ -14,6 +14,7 @@ from mjlab.tasks.velocity import mdp
 
 from src.assets.robots import (
   CASBOT02_23DOF_ACTION_SCALE,
+  CASBOT02_20DOF_AMP_BODY_NAMES,
   CASBOT02_23DOF_AMP_BODY_NAMES,
   CASBOT02_23DOF_JOINT_NAMES,
   get_casbot02_23dof_robot_cfg,
@@ -175,7 +176,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       # The source URDF base_link is named torso in the MuJoCo model.
       "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
-      "ranges": (-2.0, 2.0),
+      "ranges": (-1.0, 1.0),
       "operation": "add",
       "distribution": "uniform",
     },
@@ -228,7 +229,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.rewards["track_anchor_linear_velocity"].weight = 2.2#1.5
-  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.3
+  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.35
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
@@ -272,20 +273,20 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     weight=-0.1,
     params={"sensor_name": self_collision_cfg.name, "force_threshold": 10.0},
   )
-  cfg.rewards["feet_air_time"] = RewardTermCfg(
-    func=mdp.feet_air_time,
-    weight=0.1,
-    params={
-      "sensor_name": "feet_ground_contact",
-      "threshold_min": 0.05,
-      "threshold_max": 0.5,
-      "command_name": "twist",
-      "command_threshold": 0.2,
-    },
-  )
+  # cfg.rewards["feet_air_time"] = RewardTermCfg(
+  #   func=mdp.feet_air_time,
+  #   weight=0.1,
+  #   params={
+  #     "sensor_name": "feet_ground_contact",
+  #     "threshold_min": 0.05,
+  #     "threshold_max": 0.5,
+  #     "command_name": "twist",
+  #     "command_threshold": 0.2,
+  #   },
+  # )
   cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
     func=envs_mdp.flat_orientation_l2,
-    weight=-1,#0.2
+    weight=-0.5,#0.2
     params={"asset_cfg": SceneEntityCfg("robot")},
   )
   cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
@@ -295,42 +296,42 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   ].body_names = (anchor_name,)
   cfg.observations["critic"].terms["body_pos_b"].params[
     "body_cfg"
-  ].body_names = CASBOT02_23DOF_AMP_BODY_NAMES
+  ].body_names = CASBOT02_20DOF_AMP_BODY_NAMES
 
   cfg.observations["critic"].terms["body_ori_b"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.observations["critic"].terms["body_ori_b"].params[
     "body_cfg"
-  ].body_names = CASBOT02_23DOF_AMP_BODY_NAMES
+  ].body_names = CASBOT02_20DOF_AMP_BODY_NAMES
 
   cfg.observations["amp"].terms["body_pos_b"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.observations["amp"].terms["body_pos_b"].params[
     "body_cfg"
-  ].body_names = CASBOT02_23DOF_AMP_BODY_NAMES
+  ].body_names = CASBOT02_20DOF_AMP_BODY_NAMES
 
   cfg.observations["amp"].terms["body_ori_b"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.observations["amp"].terms["body_ori_b"].params[
     "body_cfg"
-  ].body_names = CASBOT02_23DOF_AMP_BODY_NAMES
+  ].body_names = CASBOT02_20DOF_AMP_BODY_NAMES
 
   cfg.observations["amp"].terms["body_lin_vel_b"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.observations["amp"].terms["body_lin_vel_b"].params[
     "body_cfg"
-  ].body_names = CASBOT02_23DOF_AMP_BODY_NAMES
+  ].body_names = CASBOT02_20DOF_AMP_BODY_NAMES
 
   cfg.observations["amp"].terms["body_ang_vel_b"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.observations["amp"].terms["body_ang_vel_b"].params[
     "body_cfg"
-  ].body_names = CASBOT02_23DOF_AMP_BODY_NAMES
+  ].body_names = CASBOT02_20DOF_AMP_BODY_NAMES
 
   if play:
     cfg.episode_length_s = int(1e9)

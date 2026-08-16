@@ -13,7 +13,7 @@ from mjlab.managers.scene_entity_config import SceneEntityCfg
 from src.assets.robots import (
   CASBOT02_20DOF_POLICY_ACTION_SCALE,
   CASBOT02_20DOF_POLICY_JOINT_NAMES,
-  CASBOT02_23DOF_AMP_BODY_NAMES,
+  CASBOT02_20DOF_AMP_BODY_NAMES,
   CASBOT02_LEG_ONLY_JOINT_NAMES,
 )
 import src.tasks.amp_loco.mdp as amp_mdp
@@ -36,7 +36,7 @@ def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg
     "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
   )
   FULL_AMP_BODY = SceneEntityCfg(
-    "robot", body_names=CASBOT02_23DOF_AMP_BODY_NAMES, preserve_order=True
+    "robot", body_names=CASBOT02_20DOF_AMP_BODY_NAMES, preserve_order=True
   )
 
   _remove_phase_observation(cfg)
