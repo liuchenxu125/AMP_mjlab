@@ -330,7 +330,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "track_root_height": RewardTermCfg(
       func=mdp.track_root_height,
-      weight=2.0,
+      weight=1.0,
         params={"std": 0.3,
                 "mask_delay": True,
                 "delay_env_rew_ratio": 3.5},
@@ -361,11 +361,11 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-3e-3,#-5-2
+      weight=-3e-4,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",
-        "command_threshold": 0.2,
+        "command_threshold": 0.1,
       },
     ),
     "self_collisions": RewardTermCfg(
