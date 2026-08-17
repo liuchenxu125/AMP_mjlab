@@ -1,4 +1,4 @@
-"""CASBOT02 leg-observation AMP sim2sim for the current 20-action policy."""
+"""CASBOT02 leg-observation AMP sim2sim for the current 22-action policy."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ import numpy as np
 from mjlab.entity import Entity
 
 from src.assets.robots import (
-  CASBOT02_20DOF_POLICY_ACTION_SCALE,
-  CASBOT02_20DOF_POLICY_JOINT_NAMES,
+  CASBOT02_22DOF_NO_WAIST_ACTION_SCALE,
+  CASBOT02_22DOF_NO_WAIST_JOINT_NAMES,
   CASBOT02_23DOF_JOINT_NAMES,
   CASBOT02_LEG_ONLY_JOINT_NAMES,
   get_casbot02_23dof_robot_cfg,
@@ -65,7 +65,7 @@ DEFAULT_ONNXRUNTIME_PROVIDER = "auto"
 SIM_TIMESTEP = 0.005
 HISTORY_LENGTH = 4
 NUM_OBS_JOINTS = len(CASBOT02_LEG_ONLY_JOINT_NAMES)  # 12 leg-only actor obs joints
-NUM_POLICY_ACTIONS = len(CASBOT02_20DOF_POLICY_JOINT_NAMES)
+NUM_POLICY_ACTIONS = len(CASBOT02_22DOF_NO_WAIST_JOINT_NAMES)
 NUM_FULL_JOINTS = len(CASBOT02_23DOF_JOINT_NAMES)  # 23 MuJoCo actuators, including waist
 OBS_JOINT_INDICES = np.array(
   [CASBOT02_23DOF_JOINT_NAMES.index(n) for n in CASBOT02_LEG_ONLY_JOINT_NAMES],
@@ -74,7 +74,7 @@ OBS_JOINT_INDICES = np.array(
 ACTION_JOINT_INDICES = np.array(
   [
     CASBOT02_23DOF_JOINT_NAMES.index(n)
-    for n in CASBOT02_20DOF_POLICY_JOINT_NAMES
+    for n in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
   ],
   dtype=np.int64,
 )
@@ -288,11 +288,11 @@ def ctrl_range(model: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
 
 
 def make_action_scale() -> np.ndarray:
-  """Return action scales in the current 20-joint policy order."""
+  """Return action scales in the current 22-joint policy order."""
   return np.array(
     [
-      CASBOT02_20DOF_POLICY_ACTION_SCALE[name]
-      for name in CASBOT02_20DOF_POLICY_JOINT_NAMES
+      CASBOT02_22DOF_NO_WAIST_ACTION_SCALE[name]
+      for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
     ],
     dtype=np.float64,
   )
@@ -426,7 +426,7 @@ def run(model_arg: str = "") -> None:
   if policy.output_dim is not None and policy.output_dim != NUM_POLICY_ACTIONS:
     raise RuntimeError(
       f"Expected ONNX output dim {NUM_POLICY_ACTIONS}, got {policy.output_dim}. "
-      "This sim2sim script expects the current 20-action policy without waist/wrists."
+      "This sim2sim script expects the current 22-action policy without the waist joint."
     )
   input_dim = policy.input_dim or HISTORY_LENGTH * CURRENT_SINGLE_FRAME_OBS_SIZE
   if input_dim % CURRENT_SINGLE_FRAME_OBS_SIZE != 0:
@@ -436,7 +436,7 @@ def run(model_arg: str = "") -> None:
     )
   single_frame_obs_size = CURRENT_SINGLE_FRAME_OBS_SIZE
   history_length = input_dim // single_frame_obs_size
-  obs_layout = "leg_no_phase_12j_20a"
+  obs_layout = "leg_no_phase_12j_22a"
   model = build_model()
   if model.nu != NUM_FULL_JOINTS:
     raise RuntimeError(f"Expected {NUM_FULL_JOINTS} actuators, got {model.nu}")
@@ -444,7 +444,7 @@ def run(model_arg: str = "") -> None:
   data = mujoco.MjData(model)
   default_joint_pos = make_default_joint_pos()          # 23-dim all MuJoCo joints
   default_obs_joint_pos = make_obs_joint_pos()          # 12-dim leg-only obs joints
-  action_scale = make_action_scale()                    # 20-dim policy actions
+  action_scale = make_action_scale()                    # 22-dim policy actions
   ctrl_lo, ctrl_hi = ctrl_range(model)
   command = np.array(
     [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW],

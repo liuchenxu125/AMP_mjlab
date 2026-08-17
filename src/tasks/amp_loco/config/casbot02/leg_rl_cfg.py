@@ -25,12 +25,12 @@ def casbot02_leg_amp_ppo_runner_cfg():
   """Create RL runner configuration for CASBOT02 lower-body-observation AMP task."""
   cfg = g1_amp_ppo_runner_cfg()
   cfg.experiment_name = "casbot02_leg_amp_locomotion"
-  cfg.amp_reward_coef = 0.1
+  cfg.amp_reward_coef = 0.2
   cfg.save_interval = 1000
   cfg.amp_motion_files = os.path.normpath(
     os.path.join(_MOTION_DATA_DIR, "WalkandRun_TurnBoost_v1")
   )
-  cfg.min_normalized_std = [0.05] * 20
+  cfg.min_normalized_std = [0.05] * 22
   cfg.amp_body_names = CASBOT02_23DOF_AMP_BODY_NAMES
   cfg.amp_anchor_name = "torso"
   return cfg
@@ -48,7 +48,7 @@ def casbot02_leg_amp_dual_ppo_runner_cfg():
   cfg.amp_turn_motion_files = os.path.normpath(
     os.path.join(_MOTION_DATA_DIR, "TurnInPlace")
   )
-  cfg.min_normalized_std = [0.05] * 20
+  cfg.min_normalized_std = [0.05] * 22
   cfg.amp_body_names = CASBOT02_23DOF_AMP_BODY_NAMES
   cfg.amp_anchor_name = "torso"
   return cfg

@@ -278,9 +278,9 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
         "ranges": {
-          0: (-0.06, 0.06),
-          1: (-0.06, 0.06),
-          2: (-0.06, 0.06),
+          0: (-0.025, 0.025),
+          1: (-0.025, 0.025),
+          2: (-0.03, 0.03),
         },
       },
     ),
@@ -361,11 +361,11 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-8e-3,#-5-2
+      weight=-1e-4,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",
-        "command_threshold": 0.2,
+        "command_threshold": 0.1,
       },
     ),
     "self_collisions": RewardTermCfg(
@@ -401,9 +401,10 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         terrain_type="generator",
         terrain_generator=replace(ROUGH_TERRAINS_CFG),
         max_init_terrain_level=5,
+        num_envs=4096,
       ),
       sensors=(terrain_scan,),
-      num_envs=1,
+      num_envs=4096,
       extent=2.0,
     ),
     observations=observations,
