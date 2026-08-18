@@ -65,14 +65,17 @@ DEFAULT_ONNXRUNTIME_PROVIDER = "auto"
 SIM_TIMESTEP = 0.005
 HISTORY_LENGTH = 4
 NUM_OBS_JOINTS = len(CASBOT02_LEG_ONLY_JOINT_NAMES)  # 12 leg-only actor obs joints
-NUM_POLICY_ACTIONS = len(CASBOT02_22DOF_NO_WAIST_JOINT_NAMES)  # 22 no-waist policy actions
+NUM_POLICY_ACTIONS = len(CASBOT02_22DOF_NO_WAIST_JOINT_NAMES)
 NUM_FULL_JOINTS = len(CASBOT02_23DOF_JOINT_NAMES)  # 23 MuJoCo actuators, including waist
 OBS_JOINT_INDICES = np.array(
   [CASBOT02_23DOF_JOINT_NAMES.index(n) for n in CASBOT02_LEG_ONLY_JOINT_NAMES],
   dtype=np.int64,
 )
 ACTION_JOINT_INDICES = np.array(
-  [CASBOT02_23DOF_JOINT_NAMES.index(n) for n in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES],
+  [
+    CASBOT02_23DOF_JOINT_NAMES.index(n)
+    for n in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
+  ],
   dtype=np.int64,
 )
 CURRENT_SINGLE_FRAME_OBS_SIZE = 45  # 3+3+3+12+12+12, no phase
@@ -285,9 +288,12 @@ def ctrl_range(model: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
 
 
 def make_action_scale() -> np.ndarray:
-  """Return 22-dim action scales in the current no-waist policy joint order."""
+  """Return action scales in the current 22-joint policy order."""
   return np.array(
-    [CASBOT02_22DOF_NO_WAIST_ACTION_SCALE[name] for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES],
+    [
+      CASBOT02_22DOF_NO_WAIST_ACTION_SCALE[name]
+      for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
+    ],
     dtype=np.float64,
   )
 
@@ -420,7 +426,7 @@ def run(model_arg: str = "") -> None:
   if policy.output_dim is not None and policy.output_dim != NUM_POLICY_ACTIONS:
     raise RuntimeError(
       f"Expected ONNX output dim {NUM_POLICY_ACTIONS}, got {policy.output_dim}. "
-      "This sim2sim script expects the current 22-action no-waist lower-body policy."
+      "This sim2sim script expects the current 22-action policy without the waist joint."
     )
   input_dim = policy.input_dim or HISTORY_LENGTH * CURRENT_SINGLE_FRAME_OBS_SIZE
   if input_dim % CURRENT_SINGLE_FRAME_OBS_SIZE != 0:
@@ -438,7 +444,7 @@ def run(model_arg: str = "") -> None:
   data = mujoco.MjData(model)
   default_joint_pos = make_default_joint_pos()          # 23-dim all MuJoCo joints
   default_obs_joint_pos = make_obs_joint_pos()          # 12-dim leg-only obs joints
-  action_scale = make_action_scale()                    # 22-dim no-waist policy actions
+  action_scale = make_action_scale()                    # 22-dim policy actions
   ctrl_lo, ctrl_hi = ctrl_range(model)
   command = np.array(
     [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW],
@@ -520,6 +526,13 @@ def run(model_arg: str = "") -> None:
             f"action=[{action.min():+.3f},{action.max():+.3f}] "
             f"target=[{target_pos.min():+.3f},{target_pos.max():+.3f}]"
           )
+          # 打印 23 个关节的实际位置（弧度），方便与真机对比
+          actual_qpos = np.asarray(data.qpos[7:], dtype=np.float64)
+          jp_str = "  ".join(
+            f"{name}={actual_qpos[i]:+.4f}"
+            for i, name in enumerate(CASBOT02_23DOF_JOINT_NAMES)
+          )
+          print(f"    joint_pos(rad): {jp_str}")
 
       data.ctrl[:] = target_pos
       mujoco.mj_step(model, data)
