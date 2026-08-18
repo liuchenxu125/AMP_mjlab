@@ -39,7 +39,8 @@ def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg
     "robot", body_names=CASBOT02_23DOF_AMP_BODY_NAMES, preserve_order=True
   )
 
-  _remove_phase_observation(cfg)
+  # 保留 phase 观测（条件相位：前进/后退才激活，转弯置零）
+  # _remove_phase_observation(cfg)
 
   joint_pos_action = cfg.actions["joint_pos"]
   assert isinstance(joint_pos_action, JointPositionActionCfg)

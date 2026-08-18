@@ -30,8 +30,11 @@ def phase(
   phase[:, 0] = torch.sin(global_phase * torch.pi * 2.0)
   phase[:, 1] = torch.cos(global_phase * torch.pi * 2.0)
   command = env.command_manager.get_command(command_name)
-  stand_mask = torch.linalg.norm(command, dim=1) < 0.1
-  phase = torch.where(stand_mask.unsqueeze(1), torch.zeros_like(phase), phase)
+  # 前进/后退（线速度非零、角速度小）才给相位；转弯和站立都置零
+  lin_norm = torch.linalg.norm(command[:, :2], dim=1)
+  ang_norm = torch.abs(command[:, 2])
+  forward_mask = (lin_norm > 0.1) & (ang_norm < 0.3)
+  phase = torch.where(forward_mask.unsqueeze(1), phase, torch.zeros_like(phase))
   return phase
 
 

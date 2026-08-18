@@ -27,7 +27,7 @@ def _add_casbot02_phase_observation(group) -> None:
   terms = dict(group.terms)
   terms["phase"] = ObservationTermCfg(
     func=amp_mdp.phase,
-    params={"period": 1.0, "command_name": "twist"},
+    params={"period": 1.2, "command_name": "twist"},
   )
   order = ("base_ang_vel", "projected_gravity", "command", "phase")
   ordered_terms = {name: terms.pop(name) for name in order if name in terms}
