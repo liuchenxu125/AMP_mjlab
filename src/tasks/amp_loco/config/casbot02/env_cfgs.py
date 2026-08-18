@@ -240,7 +240,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["foot_slip"].weight = -0.35
   cfg.rewards["standing_feet_slip"] = RewardTermCfg(
     func=amp_mdp.standing_feet_slip,
-    weight=-3.0,#-2
+    weight=-2.0,#-2
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -254,7 +254,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["standing_foot_distance"] = RewardTermCfg(
     func=amp_mdp.standing_foot_distance,
-    weight=-15.0,#-10
+    weight=-10.0,#-10
     params={
       "command_name": "twist",
       "command_threshold": 0.2,

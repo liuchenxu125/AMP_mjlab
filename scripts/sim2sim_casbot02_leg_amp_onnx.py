@@ -198,8 +198,8 @@ def build_model() -> mujoco.MjModel:
     type=mujoco.mjtGeom.mjGEOM_PLANE,
   )
   ground.size = [0.0, 0.0, 1.0]
-  ground.condim = 4
-  ground.friction = [0.9, 0.2, 0.2]
+  ground.condim = 3
+  ground.friction = [1.0, 0.005, 0.0001]
   ground.material = "matplane"
 
   model = spec.compile()
