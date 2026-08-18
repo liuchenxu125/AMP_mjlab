@@ -78,7 +78,7 @@ ACTION_JOINT_INDICES = np.array(
   ],
   dtype=np.int64,
 )
-CURRENT_SINGLE_FRAME_OBS_SIZE = 47  # 3+3+3+2(phase)+12+12+12
+CURRENT_SINGLE_FRAME_OBS_SIZE = 49  # 3+3+3+4(phase)+12+12+12
 PHASE_PERIOD = 1.2  # 与训练 _add_casbot02_phase_observation 的 period 一致
 PHASE_FORWARD_LIN_THRESHOLD = 0.1
 PHASE_FORWARD_ANG_THRESHOLD = 0.3
@@ -217,7 +217,7 @@ def compute_phase(
   policy_dt: float,
   command: np.ndarray,
 ) -> np.ndarray:
-  """返回 2 维 phase [sin, cos]，与训练 phase 函数一致。
+  """返回 4 维 phase [sin, cos, 左脚支撑, 右脚支撑]，与训练 phase 函数一致。
 
   只有前进/后退（线速度非零、角速度小）才给相位，转弯和站立都置零。
   """
@@ -225,14 +225,18 @@ def compute_phase(
   ang_norm = float(abs(command[2]))
   if lin_norm > PHASE_FORWARD_LIN_THRESHOLD and ang_norm < PHASE_FORWARD_ANG_THRESHOLD:
     global_phase = (step_count * policy_dt) % PHASE_PERIOD / PHASE_PERIOD
+    sin_pos = np.sin(global_phase * np.pi * 2.0)
+    cos_pos = np.cos(global_phase * np.pi * 2.0)
     return np.array(
       [
-        np.sin(global_phase * np.pi * 2.0),
-        np.cos(global_phase * np.pi * 2.0),
+        sin_pos,
+        cos_pos,
+        float(sin_pos > 0.0),  # 左脚支撑（sin>0 时左脚着地）
+        float(sin_pos < 0.0),  # 右脚支撑（sin<0 时右脚着地）
       ],
       dtype=np.float64,
     )
-  return np.zeros(2, dtype=np.float64)
+  return np.zeros(4, dtype=np.float64)
 
 
 def get_obs_frame(

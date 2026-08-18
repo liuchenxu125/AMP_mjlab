@@ -228,7 +228,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
-  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.45
+  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.4
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
@@ -240,7 +240,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["foot_slip"].weight = -0.35
   cfg.rewards["standing_feet_slip"] = RewardTermCfg(
     func=amp_mdp.standing_feet_slip,
-    weight=-2.0,#-2
+    weight=-1.0,#-2
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -254,7 +254,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["standing_foot_distance"] = RewardTermCfg(
     func=amp_mdp.standing_foot_distance,
-    weight=-10.0,#-10
+    weight=-5.0,#-10
     params={
       "command_name": "twist",
       "command_threshold": 0.2,
@@ -274,7 +274,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
     func=envs_mdp.flat_orientation_l2,
-    weight=-0.5,#0.2
+    weight=-0.2,#0.2
     params={"asset_cfg": SceneEntityCfg("robot")},
   )
   cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)

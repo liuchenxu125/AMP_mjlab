@@ -26,9 +26,13 @@ def phase(
     command_name: str,
 ) -> torch.Tensor:
   global_phase = (env.episode_length_buf * env.step_dt) % period / period
-  phase = torch.zeros(env.num_envs, 2, device=env.device)
-  phase[:, 0] = torch.sin(global_phase * torch.pi * 2.0)
-  phase[:, 1] = torch.cos(global_phase * torch.pi * 2.0)
+  sin_pos = torch.sin(global_phase * torch.pi * 2.0)
+  cos_pos = torch.cos(global_phase * torch.pi * 2.0)
+  phase = torch.zeros(env.num_envs, 4, device=env.device)
+  phase[:, 0] = sin_pos
+  phase[:, 1] = cos_pos
+  phase[:, 2] = (sin_pos > 0).float()  # 左脚支撑（sin>0 时左脚着地）
+  phase[:, 3] = (sin_pos < 0).float()  # 右脚支撑（sin<0 时右脚着地）
   command = env.command_manager.get_command(command_name)
   # 前进/后退（线速度非零、角速度小）才给相位；转弯和站立都置零
   lin_norm = torch.linalg.norm(command[:, :2], dim=1)
