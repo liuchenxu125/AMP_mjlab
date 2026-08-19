@@ -519,6 +519,13 @@ def run(model_arg: str = "") -> None:
             f"action=[{action.min():+.3f},{action.max():+.3f}] "
             f"target=[{target_pos.min():+.3f},{target_pos.max():+.3f}]"
           )
+          # 打印 23 个关节的实际位置（弧度），方便与真机对比
+          actual_qpos = np.asarray(data.qpos[7:], dtype=np.float64)
+          jp_str = "  ".join(
+            f"{name}={actual_qpos[i]:+.4f}"
+            for i, name in enumerate(CASBOT02_23DOF_JOINT_NAMES)
+          )
+          print(f"    joint_pos(rad): {jp_str}")
 
       data.ctrl[:] = target_pos
       mujoco.mj_step(model, data)
