@@ -14,8 +14,7 @@ import numpy as np
 from mjlab.entity import Entity
 
 from src.assets.robots import (
-  CASBOT02_22DOF_NO_WAIST_ACTION_SCALE,
-  CASBOT02_22DOF_NO_WAIST_JOINT_NAMES,
+  CASBOT02_LEG_ONLY_ACTION_SCALE,
   CASBOT02_23DOF_JOINT_NAMES,
   CASBOT02_LEG_ONLY_JOINT_NAMES,
   get_casbot02_23dof_robot_cfg,
@@ -65,7 +64,7 @@ DEFAULT_ONNXRUNTIME_PROVIDER = "auto"
 SIM_TIMESTEP = 0.005
 HISTORY_LENGTH = 4
 NUM_OBS_JOINTS = len(CASBOT02_LEG_ONLY_JOINT_NAMES)  # 12 leg-only actor obs joints
-NUM_POLICY_ACTIONS = len(CASBOT02_22DOF_NO_WAIST_JOINT_NAMES)
+NUM_POLICY_ACTIONS = len(CASBOT02_LEG_ONLY_JOINT_NAMES)  # 12 leg actions
 NUM_FULL_JOINTS = len(CASBOT02_23DOF_JOINT_NAMES)  # 23 MuJoCo actuators, including waist
 OBS_JOINT_INDICES = np.array(
   [CASBOT02_23DOF_JOINT_NAMES.index(n) for n in CASBOT02_LEG_ONLY_JOINT_NAMES],
@@ -74,9 +73,13 @@ OBS_JOINT_INDICES = np.array(
 ACTION_JOINT_INDICES = np.array(
   [
     CASBOT02_23DOF_JOINT_NAMES.index(n)
-    for n in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
+    for n in CASBOT02_LEG_ONLY_JOINT_NAMES
   ],
   dtype=np.int64,
+)
+# 手臂关节索引（摆臂公式用，不经网络）
+ARM_JOINT_INDICES = np.array(
+  [13, 14, 15, 16, 17, 18, 19, 20, 21, 22], dtype=np.int64
 )
 CURRENT_SINGLE_FRAME_OBS_SIZE = 45  # 3+3+3+12+12+12, no phase
 COMMAND_X_RANGE = (-3.5, 5.0)
@@ -291,8 +294,8 @@ def make_action_scale() -> np.ndarray:
   """Return action scales in the current 22-joint policy order."""
   return np.array(
     [
-      CASBOT02_22DOF_NO_WAIST_ACTION_SCALE[name]
-      for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
+      CASBOT02_LEG_ONLY_ACTION_SCALE[name]
+      for name in CASBOT02_LEG_ONLY_JOINT_NAMES
     ],
     dtype=np.float64,
   )
@@ -509,6 +512,12 @@ def run(model_arg: str = "") -> None:
           default_joint_pos[ACTION_JOINT_INDICES]
           + action.astype(np.float64) * action_scale
         )
+        # 摆臂公式：手臂肩随膝盖角度摆动（和训练 LegWithArmSwingAction 一致）
+        leg_l4 = data.qpos[7 + 3]   # 左膝 leg_l4
+        leg_r4 = data.qpos[7 + 9]   # 右膝 leg_r4
+        knee_diff = leg_l4 - leg_r4
+        target_pos[13] = 0.5 * knee_diff + default_joint_pos[13]  # 左臂肩
+        target_pos[18] = -0.5 * knee_diff + default_joint_pos[18]  # 右臂肩
         target_pos = np.clip(target_pos, ctrl_lo, ctrl_hi)
 
         viewer.cam.lookat = [

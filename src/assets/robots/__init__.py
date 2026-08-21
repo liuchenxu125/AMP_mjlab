@@ -39,3 +39,6 @@ from .casbot02.casbot02_constants import (
 from .casbot02.casbot02_constants import (
   CASBOT02_LEG_ONLY_JOINT_NAMES as CASBOT02_LEG_ONLY_JOINT_NAMES,
 )
+from .casbot02.casbot02_constants import (
+  CASBOT02_LEG_ONLY_ACTION_SCALE as CASBOT02_LEG_ONLY_ACTION_SCALE,
+)

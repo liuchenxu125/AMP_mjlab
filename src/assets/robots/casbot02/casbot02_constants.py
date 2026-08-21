@@ -250,15 +250,15 @@ HOME_KEYFRAME = EntityCfg.InitialStateCfg(
     "leg_r5_joint": -0.175,
     "leg_r6_joint": 0.0,
     "waist_yaw_joint": 0.0,
-    "upper_left_1_joint": 0.0,
-    "upper_left_2_joint": 0.0,
+    "upper_left_1_joint": 0.2,
+    "upper_left_2_joint": 0.2,
     "upper_left_3_joint": 0.0,
-    "upper_left_4_joint": 0.0,
+    "upper_left_4_joint": -0.6,
     "upper_left_5_joint": 0.0,
-    "upper_right_1_joint": 0.0,
-    "upper_right_2_joint": 0.0,
+    "upper_right_1_joint": 0.2,
+    "upper_right_2_joint": -0.2,
     "upper_right_3_joint": 0.0,
-    "upper_right_4_joint": 0.0,
+    "upper_right_4_joint": -0.6,
     "upper_right_5_joint": 0.0,
   },
   joint_vel={".*": 0.0},
@@ -303,6 +303,12 @@ for a in CASBOT02_23DOF_ARTICULATION.actuators:
 CASBOT02_22DOF_NO_WAIST_ACTION_SCALE: dict[str, float] = {
   name: CASBOT02_23DOF_ACTION_SCALE[name]
   for name in CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
+}
+
+# 12 腿关节的 action scale（手臂由摆臂公式控制，不经网络）
+CASBOT02_LEG_ONLY_ACTION_SCALE: dict[str, float] = {
+  name: CASBOT02_23DOF_ACTION_SCALE[name]
+  for name in CASBOT02_LEG_ONLY_JOINT_NAMES
 }
 
 

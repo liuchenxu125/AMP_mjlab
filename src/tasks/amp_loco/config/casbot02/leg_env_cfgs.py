@@ -11,9 +11,8 @@ from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 
 from src.assets.robots import (
-  CASBOT02_22DOF_NO_WAIST_ACTION_SCALE,
-  CASBOT02_22DOF_NO_WAIST_JOINT_NAMES,
-  CASBOT02_23DOF_AMP_BODY_NAMES,
+  CASBOT02_LEG_ONLY_ACTION_SCALE,
+  CASBOT02_LEG_AMP_BODY_NAMES,
   CASBOT02_LEG_ONLY_JOINT_NAMES,
 )
 import src.tasks.amp_loco.mdp as amp_mdp
@@ -31,20 +30,23 @@ def _remove_phase_observation(cfg: ManagerBasedRlEnvCfg) -> None:
 
 
 def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
-  """Use 12-leg actor/critic state, 22-DoF no-waist action, and full AMP style."""
+  """Use 12-leg actor/critic state, 12-leg action, and leg+waist AMP style."""
   LEG_ONLY_ASSET = SceneEntityCfg(
     "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
   )
   FULL_AMP_BODY = SceneEntityCfg(
-    "robot", body_names=CASBOT02_23DOF_AMP_BODY_NAMES, preserve_order=True
+    "robot", body_names=CASBOT02_LEG_AMP_BODY_NAMES, preserve_order=True
   )
 
   _remove_phase_observation(cfg)
 
-  joint_pos_action = cfg.actions["joint_pos"]
-  assert isinstance(joint_pos_action, JointPositionActionCfg)
-  joint_pos_action.actuator_names = CASBOT02_22DOF_NO_WAIST_JOINT_NAMES
-  joint_pos_action.scale = CASBOT02_22DOF_NO_WAIST_ACTION_SCALE
+  # 12 腿 action + 手臂摆臂（手臂由摆臂公式控制，不经网络）。
+  cfg.actions["joint_pos"] = amp_mdp.LegWithArmSwingActionCfg(
+    entity_name="robot",
+    actuator_names=CASBOT02_LEG_ONLY_JOINT_NAMES,
+    scale=CASBOT02_LEG_ONLY_ACTION_SCALE,
+    use_default_offset=True,
+  )
 
   # ---- Actor observations: deployment-visible state only (12 leg joints) ----
   cfg.observations["actor"].terms["joint_pos"].params["asset_cfg"] = LEG_ONLY_ASSET
