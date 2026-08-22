@@ -248,7 +248,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=()),  # Set per-robot.
         "operation": "abs",
-        "ranges": (0.3, 1.2),
+        "ranges": (0.2, 1.3),
         "shared_random": True,  # All foot geoms share the same friction.
       },
     ),
@@ -267,8 +267,8 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
         "ranges": {
-          0: (-0.03, 0.03),
-          1: (-0.03, 0.03),
+          0: (-0.025, 0.025),
+          1: (-0.025, 0.025),
           2: (-0.03, 0.03),
         },
       },
@@ -348,15 +348,15 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", site_names=()),  # Set per-robot.
       },
     ),
-    # "soft_landing": RewardTermCfg(
-    #   func=mdp.soft_landing,
-    #   weight=-1e-4,#-5-2
-    #   params={
-    #     "sensor_name": "feet_ground_contact",
-    #     "command_name": "twist",
-    #     "command_threshold": 0.1,
-    #   },
-    # ),
+    "soft_landing": RewardTermCfg(
+      func=mdp.soft_landing,
+      weight=-1e-3,#-5-2
+      params={
+        "sensor_name": "feet_ground_contact",
+        "command_name": "twist",
+        "command_threshold": 0.1,
+      },
+    ),
     "self_collisions": RewardTermCfg(
       func=mdp.self_collision_cost,
       weight=-0.1,

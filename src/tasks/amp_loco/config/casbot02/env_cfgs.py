@@ -227,13 +227,13 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
-  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.45
+  cfg.rewards["track_anchor_linear_velocity"].weight = 1.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 1.0
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_angular_velocity"].weight = 2.0
-  cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.5
+  cfg.rewards["track_anchor_angular_velocity"].weight = 1.0
+  cfg.rewards["track_anchor_angular_velocity"].params["std"] = 1.0
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
   cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
@@ -272,11 +272,11 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     weight=-0.1,
     params={"sensor_name": self_collision_cfg.name, "force_threshold": 10.0},
   )
-  # cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
-  #   func=envs_mdp.flat_orientation_l2,
-  #   weight=-0.5,#0.2
-  #   params={"asset_cfg": SceneEntityCfg("robot")},
-  # )
+  cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
+    func=envs_mdp.flat_orientation_l2,
+    weight=-0.5,#0.2
+    params={"asset_cfg": SceneEntityCfg("robot")},
+  )
   cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
 
   cfg.observations["critic"].terms["body_pos_b"].params[
