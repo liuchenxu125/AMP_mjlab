@@ -149,7 +149,6 @@
       </body>
       <body name="waist_yaw_link" pos="0 0 0.15424">
         <inertial pos="-0.011182 0.00019844 0.18439" quat="0.998775 0.000610279 0.0490013 0.00679043" mass="11.255" diaginertia="0.134276 0.125508 0.0732664"/>
-        <joint name="waist_yaw_joint" pos="0 0 0" axis="0 0 1" range="-1.5708 1.5708" armature="0.0245"/>
         <geom type="mesh" contype="0" conaffinity="0" group="1" density="0" rgba="0.79216 0.81961 0.93333 1" mesh="waist_yaw_link"/>
         <geom type="mesh" rgba="0.79216 0.81961 0.93333 1" mesh="waist_yaw_link"/>
         <body name="head_yaw_link" pos="0 0 0.36225">
@@ -265,7 +264,6 @@
 		<motor name="leg_r4_joint" joint="leg_r4_joint"/>
     <motor name="leg_r5_joint" joint="leg_r5_joint"/>
     <motor name="leg_r6_joint" joint="leg_r6_joint"/>
-    <motor name="waist_yaw_joint" joint="waist_yaw_joint"/>
 
 
     <motor name="upper_left_1_joint" joint="upper_left_1_joint"/>

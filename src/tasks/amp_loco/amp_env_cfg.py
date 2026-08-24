@@ -233,12 +233,12 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       interval_range_s=(1.0, 3.0),
       params={
         "velocity_range": {
-          "x": (-1.0, 1.0),
+          "x": (-0.5, 0.5),
           "y": (-0.5, 0.5),
-          "z": (-0.4, 0.4),
-          "roll": (-0.52, 0.52),
-          "pitch": (-0.52, 0.52),
-          "yaw": (-0.78, 0.78),
+          # "z": (-0.4, 0.4),
+          "roll": (-0.6, 0.6),
+          "pitch": (-0.6, 0.6),
+          "yaw": (-0.8, 0.8),
         },
       },
     ),
@@ -350,7 +350,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-1e-3,#-5-2
+      weight=-3e-4,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",

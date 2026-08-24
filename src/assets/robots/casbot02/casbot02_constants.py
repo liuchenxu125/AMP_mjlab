@@ -32,7 +32,6 @@ CASBOT02_23DOF_JOINT_NAMES: tuple[str, ...] = (
   "leg_r4_joint",
   "leg_r5_joint",
   "leg_r6_joint",
-  "waist_yaw_joint",
   "upper_left_1_joint",
   "upper_left_2_joint",
   "upper_left_3_joint",
@@ -74,7 +73,6 @@ CASBOT02_LEG_AMP_BODY_NAMES: tuple[str, ...] = (
   "leg_r2_link",
   "leg_r4_link",
   "leg_r6_link",
-  "waist_yaw_link",
 )
 
 CASBOT02_LEG_JOINT_NAMES: tuple[str, ...] = (
@@ -90,10 +88,9 @@ CASBOT02_LEG_JOINT_NAMES: tuple[str, ...] = (
   "leg_r4_joint",
   "leg_r5_joint",
   "leg_r6_joint",
-  "waist_yaw_joint",
 )
 
-CASBOT02_LEG_ONLY_JOINT_NAMES: tuple[str, ...] = CASBOT02_LEG_JOINT_NAMES[:-1]
+CASBOT02_LEG_ONLY_JOINT_NAMES: tuple[str, ...] = CASBOT02_LEG_JOINT_NAMES
 
 CASBOT02_22DOF_NO_WAIST_JOINT_NAMES: tuple[str, ...] = tuple(
   name for name in CASBOT02_23DOF_JOINT_NAMES if name != "waist_yaw_joint"
@@ -249,7 +246,6 @@ HOME_KEYFRAME = EntityCfg.InitialStateCfg(
     "leg_r4_joint": 0.36,
     "leg_r5_joint": -0.175,
     "leg_r6_joint": 0.0,
-    "waist_yaw_joint": 0.0,
     "upper_left_1_joint": 0.2,
     "upper_left_2_joint": 0.2,
     "upper_left_3_joint": 0.0,
@@ -272,7 +268,6 @@ CASBOT02_23DOF_ARTICULATION = EntityArticulationInfoCfg(
   actuators=(
     _with_motor_comm_delay(CASBOT02_LEG_HEAVY_ACTUATOR),
     _with_motor_comm_delay(CASBOT02_LEG_LIGHT_ACTUATOR),
-    _with_motor_comm_delay(CASBOT02_WAIST_YAW_ACTUATOR),
     _with_motor_comm_delay(CASBOT02_ARM_HEAVY_ACTUATOR),
     _with_motor_comm_delay(CASBOT02_ARM_LIGHT_ACTUATOR),
   ),

@@ -28,7 +28,7 @@ def casbot02_leg_amp_ppo_runner_cfg():
   cfg.amp_reward_coef = 0.1
   cfg.save_interval = 1000
   cfg.amp_motion_files = os.path.normpath(
-    os.path.join(_MOTION_DATA_DIR, "WalkandRun_TurnBoost_v1")
+    os.path.join(_MOTION_DATA_DIR, "WalkandRun")
   )
   cfg.min_normalized_std = [0.05] * 12
   cfg.amp_body_names = CASBOT02_LEG_AMP_BODY_NAMES

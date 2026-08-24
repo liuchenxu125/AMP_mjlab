@@ -26,7 +26,7 @@ class LegWithArmSwingAction(JointPositionAction):
 
   _LEG_L4_ID = 3
   _LEG_R4_ID = 9
-  _ARM_IDS = (13, 14, 15, 16, 17, 18, 19, 20, 21, 22)
+  _ARM_IDS = (12, 13, 14, 15, 16, 17, 18, 19, 20, 21)
   _LEFT_SHOULDER = 0   # arm_target index for upper_left_1
   _RIGHT_SHOULDER = 5  # arm_target index for upper_right_1
 

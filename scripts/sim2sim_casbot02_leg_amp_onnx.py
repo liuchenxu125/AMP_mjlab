@@ -79,7 +79,7 @@ ACTION_JOINT_INDICES = np.array(
 )
 # 手臂关节索引（摆臂公式用，不经网络）
 ARM_JOINT_INDICES = np.array(
-  [13, 14, 15, 16, 17, 18, 19, 20, 21, 22], dtype=np.int64
+  [12, 13, 14, 15, 16, 17, 18, 19, 20, 21], dtype=np.int64
 )
 CURRENT_SINGLE_FRAME_OBS_SIZE = 45  # 3+3+3+12+12+12, no phase
 COMMAND_X_RANGE = (-3.5, 5.0)
@@ -516,8 +516,8 @@ def run(model_arg: str = "") -> None:
         leg_l4 = data.qpos[7 + 3]   # 左膝 leg_l4
         leg_r4 = data.qpos[7 + 9]   # 右膝 leg_r4
         knee_diff = leg_l4 - leg_r4
-        target_pos[13] = 0.5 * knee_diff + default_joint_pos[13]  # 左臂肩
-        target_pos[18] = -0.5 * knee_diff + default_joint_pos[18]  # 右臂肩
+        target_pos[12] = 0.5 * knee_diff + default_joint_pos[12]  # 左臂肩
+        target_pos[17] = -0.5 * knee_diff + default_joint_pos[17]  # 右臂肩
         target_pos = np.clip(target_pos, ctrl_lo, ctrl_hi)
 
         viewer.cam.lookat = [

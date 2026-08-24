@@ -16,6 +16,7 @@ from src.assets.robots import (
   CASBOT02_23DOF_ACTION_SCALE,
   CASBOT02_23DOF_AMP_BODY_NAMES,
   CASBOT02_23DOF_JOINT_NAMES,
+  CASBOT02_LEG_ONLY_JOINT_NAMES,
   get_casbot02_23dof_robot_cfg,
 )
 import src.tasks.amp_loco.mdp as amp_mdp
@@ -131,7 +132,10 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     mode="startup",
     func=envs_mdp.dr.pd_gains,
     params={
-      "asset_cfg": SceneEntityCfg("robot"),
+      "asset_cfg": SceneEntityCfg(
+        "robot",
+        actuator_ids=[0, 1],  # 腿部 actuator 组（LEG_HEAVY + LEG_LIGHT）
+      ),
       "kp_range": (0.85, 1.15),
       "kd_range": (0.85, 1.15),
       "operation": "scale",
@@ -142,7 +146,10 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     mode="startup",
     func=amp_mdp.effort_limits_with_delayed_actuators,
     params={
-      "asset_cfg": SceneEntityCfg("robot"),
+      "asset_cfg": SceneEntityCfg(
+        "robot",
+        actuator_ids=[0, 1],  # 腿部 actuator 组（LEG_HEAVY + LEG_LIGHT）
+      ),
       "effort_limit_range": (0.85, 1.15),
       "operation": "scale",
       "distribution": "uniform",
@@ -152,7 +159,11 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     mode="startup",
     func=envs_mdp.dr.joint_friction,
     params={
-      "asset_cfg": SceneEntityCfg("robot"),
+      "asset_cfg": SceneEntityCfg(
+        "robot",
+        joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES,
+        preserve_order=True,
+      ),
       "ranges": (0.5, 1.5),
       "operation": "scale",
       "distribution": "uniform",
@@ -212,7 +223,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     "amp",
   )
   _motion_dir = os.path.abspath(
-    os.path.join(_motion_base, "WalkandRun_TurnBoost_v1")
+    os.path.join(_motion_base, "WalkandRun")
   )
 
   cfg.events["init_motion_loader"].params["motion_dir"] = _motion_dir
@@ -278,6 +289,19 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={"asset_cfg": SceneEntityCfg("robot")},
   )
   cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
+
+  # 关节级奖励/DR 只作用腿部关节（手臂由摆臂公式控制，不经网络）。
+  # joint_acc_l2 保留两个摆臂肩关节（upper_left_1/upper_right_1），其余手臂去掉。
+  _leg_swing_joints = CASBOT02_LEG_ONLY_JOINT_NAMES + (
+    "upper_left_1_joint",
+    "upper_right_1_joint",
+  )
+  cfg.rewards["joint_acc_l2"].params["asset_cfg"] = SceneEntityCfg(
+    "robot", joint_names=_leg_swing_joints, preserve_order=True
+  )
+  cfg.rewards["joint_pos_limits"].params["asset_cfg"] = SceneEntityCfg(
+    "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
+  )
 
   cfg.observations["critic"].terms["body_pos_b"].params[
     "anchor_cfg"

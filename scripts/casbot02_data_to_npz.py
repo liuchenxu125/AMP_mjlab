@@ -167,13 +167,15 @@ class Casbot02Motion:
     right_leg = raw[:, 18:24]
     left_arm5 = raw[:, 24:29]
     right_arm5 = raw[:, 31:36]
-    waist = raw[:, 60:61]
+    # waist_yaw_joint 已彻底固定，不在 22 关节里，跳过 raw[:, 60:61]
     dof_pos = np.concatenate(
-      [left_leg, right_leg, waist, left_arm5, right_arm5],
+      [left_leg, right_leg, left_arm5, right_arm5],
       axis=1,
     ).astype(np.float32)
     if dof_pos.shape[1] != len(CASBOT02_23DOF_JOINT_NAMES):
-      raise ValueError(f"Expected 23 dof columns, got {dof_pos.shape[1]}")
+      raise ValueError(
+        f"Expected {len(CASBOT02_23DOF_JOINT_NAMES)} dof columns, got {dof_pos.shape[1]}"
+      )
     return dof_pos
 
   def get_next_state(
