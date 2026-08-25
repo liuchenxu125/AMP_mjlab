@@ -233,12 +233,12 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       interval_range_s=(1.0, 3.0),
       params={
         "velocity_range": {
-          "x": (-0.5, 0.5),
+          "x": (-1.0, 1.0),
           "y": (-0.5, 0.5),
           # "z": (-0.4, 0.4),
-          "roll": (-0.6, 0.6),
-          "pitch": (-0.6, 0.6),
-          "yaw": (-0.8, 0.8),
+          "roll": (-0.52, 0.52),
+          "pitch": (-0.52, 0.52),
+          "yaw": (-0.78, 0.78),
         },
       },
     ),
@@ -267,8 +267,8 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
         "ranges": {
-          0: (-0.03, 0.03),
-          1: (-0.03, 0.03),
+          0: (-0.025, 0.025),
+          1: (-0.025, 0.025),
           2: (-0.03, 0.03),
         },
       },

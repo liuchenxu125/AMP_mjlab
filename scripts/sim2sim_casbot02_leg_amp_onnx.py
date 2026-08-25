@@ -543,6 +543,24 @@ def run(model_arg: str = "") -> None:
           )
           print(f"    joint_pos(rad): {jp_str}")
 
+          # 打印重心（全身 COM）相对 base 的偏移 + torso pitch 角，方便对比真机重心后倾
+          com_world = np.asarray(data.subtree_com[0], dtype=np.float64)  # 全身 COM 世界系
+          base_pos = np.asarray(data.qpos[0:3], dtype=np.float64)
+          com_rel = com_world - base_pos  # x=前后(+前), y=左右, z=上下
+          w, x, y, z = np.asarray(data.qpos[3:7], dtype=np.float64)
+          pitch_deg = np.degrees(np.arcsin(2.0 * (w * y - z * x)))
+          print(
+            f"    com_rel=[{com_rel[0]:+.4f},{com_rel[1]:+.4f},{com_rel[2]:+.4f}] "
+            f"pitch={pitch_deg:+.2f}deg"
+          )
+
+          # 打印关节力矩（actuator force，N·m），方便与真机对比
+          force_str = "  ".join(
+            f"{mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)}={data.actuator_force[i]:+.2f}"
+            for i in range(model.nu)
+          )
+          print(f"    actuator_force(Nm): {force_str}")
+
       data.ctrl[:] = target_pos
       mujoco.mj_step(model, data)
       if step % DEFAULT_RENDER_DECIMATION == 0:
