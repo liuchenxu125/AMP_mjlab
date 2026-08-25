@@ -30,16 +30,16 @@ DEFAULT_INIT_MOTION_CANDIDATES = (
   / "motions"
   / "casbot02"
   / "amp"
-  / "WalkandRun_TurnBoost_v1"
-  / "直行1步态.npz",
+  / "WalkandRun"
+  / "CASBOT02_YKS_02_1000HZ.npz",
   REPO_ROOT
   / "src"
   / "assets"
   / "motions"
   / "casbot02"
   / "amp"
-  / "WalkandRun_InPlaceTurnOnly"
-  / "直行1步态.npz",
+  / "WalkandRun"
+  / "CASBOT02_YKS_04_1000HZ.npz",
 )
 DEFAULT_INIT_MOTION = next(
   (path for path in DEFAULT_INIT_MOTION_CANDIDATES if path.exists()), None

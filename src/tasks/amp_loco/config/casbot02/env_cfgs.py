@@ -124,7 +124,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       "asset_cfg": SceneEntityCfg("robot"),
       "operation": "abs",
-      "ranges": (0.4, 1.2),
+      "ranges": (0.3, 1.3),
       "shared_random": True,
     },
   )
@@ -186,24 +186,24 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       # The source URDF base_link is named torso in the MuJoCo model.
       "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
-      "ranges": (-0.5, 0.5),
+      "ranges": (-1.0, 1.0),
       "operation": "add",
       "distribution": "uniform",
     },
   )
-  # cfg.events["non_base_mass"] = EventTermCfg(
-  #   mode="startup",
-  #   func=envs_mdp.dr.body_mass,
-  #   params={
-  #     "asset_cfg": SceneEntityCfg(
-  #       "robot", body_names=(r"^(?!torso$).+$",)
-  #     ),
-  #     "ranges": (0.8, 1.2),
-  #     "operation": "scale",
-  #     "distribution": "uniform",
-  #     "shared_random": False,
-  #   },
-  # )
+  cfg.events["non_base_mass"] = EventTermCfg(
+    mode="startup",
+    func=envs_mdp.dr.body_mass,
+    params={
+      "asset_cfg": SceneEntityCfg(
+        "robot", body_names=(r"^(?!torso$).+$",)
+      ),
+      "ranges": (0.8, 1.2),
+      "operation": "scale",
+      "distribution": "uniform",
+      "shared_random": False,
+    },
+  )
   # cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
@@ -238,20 +238,20 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 1.5#1.5
-  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.35
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_angular_velocity"].weight = 1.5
+  cfg.rewards["track_anchor_angular_velocity"].weight = 2.0
   cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.5
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
   cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
-  cfg.rewards["foot_slip"].weight = -0.35
+  cfg.rewards["foot_slip"].weight = -0.4
   cfg.rewards["standing_feet_slip"] = RewardTermCfg(
     func=amp_mdp.standing_feet_slip,
-    weight=-1.0,#-2
+    weight=-3.0,#-2
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -265,7 +265,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["standing_foot_distance"] = RewardTermCfg(
     func=amp_mdp.standing_foot_distance,
-    weight=-5.0,#-10
+    weight=-15.0,#-10
     params={
       "command_name": "twist",
       "command_threshold": 0.2,
