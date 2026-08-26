@@ -23,6 +23,11 @@ import src.tasks.amp_loco.mdp as amp_mdp
 from src.tasks.amp_loco.amp_env_cfg import make_amp_env_cfg
 from src.tasks.velocity.mdp import UniformVelocityCommandCfg
 
+# 训练时躯干(waist_yaw_link)质心后偏量(米),正值=向后,对齐真机质心 gap。
+# 真机站立后倾、sim 前倾,说明真机上半身(头+双臂挂在 waist_yaw_link)质心比模型更靠后。
+# 把 sim 的 waist_yaw_link 质心固定后移 3cm,让策略在训练时就学会往前压应对。
+WAIST_COM_BACKWARD_OFFSET = 0.03
+
 
 def _add_casbot02_phase_observation(group) -> None:
   terms = dict(group.terms)
@@ -204,9 +209,24 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       "shared_random": False,
     },
   )
-  # cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
+  cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
+  # 躯干(waist_yaw_link)质心固定后移,对齐真机 gap。承载头+双臂,是上半身质量大头。
+  cfg.events["waist_com_backward"] = EventTermCfg(
+    mode="startup",
+    func=envs_mdp.dr.body_com_offset,
+    params={
+      "asset_cfg": SceneEntityCfg("robot", body_names=("waist_yaw_link",)),
+      "operation": "add",
+      "ranges": {
+        0: (-WAIST_COM_BACKWARD_OFFSET, -WAIST_COM_BACKWARD_OFFSET),  # 固定后偏
+        1: (0.0, 0.0),
+        2: (0.0, 0.0),
+      },
+      "distribution": "uniform",
+    },
+  )
 
   cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
@@ -248,7 +268,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
   cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
-  cfg.rewards["foot_slip"].weight = -0.4
+  cfg.rewards["foot_slip"].weight = -0.5
   cfg.rewards["feet_air_time"] = RewardTermCfg(
     func=mdp.feet_air_time,
     weight=0.3,
@@ -262,7 +282,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["standing_feet_slip"] = RewardTermCfg(
     func=amp_mdp.standing_feet_slip,
-    weight=3.0,#-2
+    weight=-2.0,#-2
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -276,7 +296,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   )
   cfg.rewards["standing_foot_distance"] = RewardTermCfg(
     func=amp_mdp.standing_foot_distance,
-    weight=-15.0,#-10
+    weight=-10.0,#-10
     params={
       "command_name": "twist",
       "command_threshold": 0.2,
@@ -313,6 +333,17 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["joint_pos_limits"].params["asset_cfg"] = SceneEntityCfg(
     "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
   )
+  # 力矩惩罚：只惩罚腿部 actuator 组（LEG_HEAVY + LEG_LIGHT），抑制髋 roll 极大力矩。
+  # cfg.rewards["joint_torques_l2"] = RewardTermCfg(
+  #   func=envs_mdp.joint_torques_l2,
+  #   weight=-1e-7,
+  #   params={
+  #     "asset_cfg": SceneEntityCfg(
+  #       "robot",
+  #       actuator_ids=[0, 1],  # 腿部 actuator 组（LEG_HEAVY + LEG_LIGHT）
+  #     ),
+  #   },
+  # )
 
   cfg.observations["critic"].terms["body_pos_b"].params[
     "anchor_cfg"
