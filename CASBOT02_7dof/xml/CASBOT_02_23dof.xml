@@ -107,7 +107,7 @@
                   <site name='left_force' size='0.01' pos='0.0 0 0.0'/>
                   <inertial pos="0.022729 0.0012472 -0.036097" quat="-0.00552979 0.685771 -0.0209495 0.727494" mass="1.1006" diaginertia="0.00625553 0.00580738 0.00145009"/>
                   <joint name="leg_l6_joint" pos="0 0 0" axis="1 0 0" range="-0.50614 0.50614" armature="0.039"/>
-                  <geom type="mesh" rgba="1 1 1 1" mesh="left_leg_ankle_roll_link" class="collision"/>
+                  <geom name="left_foot_collision" type="mesh" rgba="1 1 1 1" mesh="left_leg_ankle_roll_link" class="collision"/>
                 </body>
               </body>
             </body>
@@ -140,7 +140,7 @@
                   <site name='right_force' size='0.01' pos='0.0 0 0.0'/>
                   <inertial pos="0.0231 -0.001227 -0.032967" quat="0.00258561 0.690017 0.0161851 0.723607" mass="1.0936" diaginertia="0.00708339 0.00652483 0.00166808"/>
                   <joint name="leg_r6_joint" pos="0 0 0" axis="1 0 0" range="-0.50614 0.50614" armature="0.039"/>
-                  <geom type="mesh" rgba="1 1 1 1" mesh="right_leg_ankle_roll_link" class="collision"/>
+                  <geom name="right_foot_collision" type="mesh" rgba="1 1 1 1" mesh="right_leg_ankle_roll_link" class="collision"/>
                 </body>
               </body>
             </body>

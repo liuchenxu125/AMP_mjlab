@@ -120,14 +120,17 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   twist_cmd.ranges.lin_vel_y = (-0.3, 0.3)
   # twist_cmd.ang_vel_deadband = 0.3  # 去掉 deadband，让策略学习全范围转弯命令
 
-  # CASBOT02 source XML geoms are mostly unnamed, so randomize all robot geoms
-  # instead of relying on foot geom names.
-  cfg.events.pop("foot_friction", None)
-  cfg.events["robot_friction"] = EventTermCfg(
+  # Randomize only the two foot collision geoms. The corresponding MJCF geoms
+  # are explicitly named so this selection remains stable if geom order changes.
+  cfg.events["foot_friction"] = EventTermCfg(
     mode="startup",
     func=envs_mdp.dr.geom_friction,
     params={
-      "asset_cfg": SceneEntityCfg("robot"),
+      "asset_cfg": SceneEntityCfg(
+        "robot",
+        geom_names=("left_foot_collision", "right_foot_collision"),
+        preserve_order=True,
+      ),
       "operation": "abs",
       "ranges": (0.3, 1.3),
       "shared_random": True,
@@ -258,12 +261,12 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 1.5#1.5
   cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.5
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_angular_velocity"].weight = 2.0
+  cfg.rewards["track_anchor_angular_velocity"].weight = 1.5
   cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.5
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
