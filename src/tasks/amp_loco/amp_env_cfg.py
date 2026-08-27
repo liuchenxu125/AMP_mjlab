@@ -196,7 +196,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       heading_control_stiffness=0.5,
       debug_vis=True,
       ranges=UniformVelocityCommandCfg.Ranges(
-        lin_vel_x=(-0.6, 0.8),
+        lin_vel_x=(-0.5, 0.8),
         lin_vel_y=(0.0, 0.0),
         ang_vel_z=(-1.57, 1.57),
         heading=(-math.pi / 2, math.pi / 2),
@@ -267,7 +267,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
         "ranges": {
-          0: (-0.05, 0.00),
+          0: (-0.025, 0.025),
           1: (-0.025, 0.025),
           2: (-0.03, 0.03),
         },
@@ -350,7 +350,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-1e-3,#-5-2
+      weight=-6e-4,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",

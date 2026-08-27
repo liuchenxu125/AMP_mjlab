@@ -26,7 +26,7 @@ from src.tasks.velocity.mdp import UniformVelocityCommandCfg
 # 训练时躯干(waist_yaw_link)质心后偏量(米),正值=向后,对齐真机质心 gap。
 # 真机站立后倾、sim 前倾,说明真机上半身(头+双臂挂在 waist_yaw_link)质心比模型更靠后。
 # 把 sim 的 waist_yaw_link 质心固定后移 3cm,让策略在训练时就学会往前压应对。
-WAIST_COM_BACKWARD_OFFSET = 0.03
+WAIST_COM_BACKWARD_OFFSET = 0.02
 
 
 def _add_casbot02_phase_observation(group) -> None:
@@ -196,37 +196,37 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       "distribution": "uniform",
     },
   )
-  cfg.events["non_base_mass"] = EventTermCfg(
-    mode="startup",
-    func=envs_mdp.dr.body_mass,
-    params={
-      "asset_cfg": SceneEntityCfg(
-        "robot", body_names=(r"^(?!torso$).+$",)
-      ),
-      "ranges": (0.9, 1.1),
-      "operation": "scale",
-      "distribution": "uniform",
-      "shared_random": False,
-    },
-  )
-  cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
+  # cfg.events["non_base_mass"] = EventTermCfg(
+  #   mode="startup",
+  #   func=envs_mdp.dr.body_mass,
+  #   params={
+  #     "asset_cfg": SceneEntityCfg(
+  #       "robot", body_names=(r"^(?!torso$).+$",)
+  #     ),
+  #     "ranges": (0.9, 1.1),
+  #     "operation": "scale",
+  #     "distribution": "uniform",
+  #     "shared_random": False,
+  #   },
+  # )
+  # cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
-  # 躯干(waist_yaw_link)质心固定后移,对齐真机 gap。承载头+双臂,是上半身质量大头。
-  cfg.events["waist_com_backward"] = EventTermCfg(
-    mode="startup",
-    func=envs_mdp.dr.body_com_offset,
-    params={
-      "asset_cfg": SceneEntityCfg("robot", body_names=("waist_yaw_link",)),
-      "operation": "add",
-      "ranges": {
-        0: (-WAIST_COM_BACKWARD_OFFSET, -WAIST_COM_BACKWARD_OFFSET),  # 固定后偏
-        1: (0.0, 0.0),
-        2: (0.0, 0.0),
-      },
-      "distribution": "uniform",
-    },
-  )
+  # 躯干(waist_yaw_link)质心前后移,对齐真机 gap。承载头+双臂,是上半身质量大头。
+  # cfg.events["waist_com_backward"] = EventTermCfg(
+  #   mode="startup",
+  #   func=envs_mdp.dr.body_com_offset,
+  #   params={
+  #     "asset_cfg": SceneEntityCfg("robot", body_names=("waist_yaw_link",)),
+  #     "operation": "add",
+  #     "ranges": {
+  #       0: (-WAIST_COM_BACKWARD_OFFSET, WAIST_COM_BACKWARD_OFFSET),  # 固定后偏
+  #       1: (0.0, 0.0),
+  #       2: (-0.2, 0.2),
+  #     },
+  #     "distribution": "uniform",
+  #   },
+  # )
 
   cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
@@ -314,11 +314,11 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     weight=-0.1,
     params={"sensor_name": self_collision_cfg.name, "force_threshold": 10.0},
   )
-  cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
-    func=envs_mdp.flat_orientation_l2,
-    weight=-1,#0.2
-    params={"asset_cfg": SceneEntityCfg("robot")},
-  )
+  # cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
+  #   func=envs_mdp.flat_orientation_l2,
+  #   weight=-1,#0.2
+  #   params={"asset_cfg": SceneEntityCfg("robot")},
+  # )
   cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
 
   # 关节级奖励/DR 只作用腿部关节（手臂由摆臂公式控制，不经网络）。
