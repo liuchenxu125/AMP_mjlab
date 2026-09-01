@@ -350,7 +350,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-6e-4,#-5-2
+      weight=-8e-4,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",
