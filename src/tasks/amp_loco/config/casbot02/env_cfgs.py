@@ -199,37 +199,37 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       "distribution": "uniform",
     },
   )
-  # cfg.events["non_base_mass"] = EventTermCfg(
-  #   mode="startup",
-  #   func=envs_mdp.dr.body_mass,
-  #   params={
-  #     "asset_cfg": SceneEntityCfg(
-  #       "robot", body_names=(r"^(?!torso$).+$",)
-  #     ),
-  #     "ranges": (0.9, 1.1),
-  #     "operation": "scale",
-  #     "distribution": "uniform",
-  #     "shared_random": False,
-  #   },
-  # )
+  cfg.events["non_base_mass"] = EventTermCfg(
+    mode="startup",
+    func=envs_mdp.dr.body_mass,
+    params={
+      "asset_cfg": SceneEntityCfg(
+        "robot", body_names=(r"^(?!torso$).+$",)
+      ),
+      "ranges": (0.9, 1.1),
+      "operation": "scale",
+      "distribution": "uniform",
+      "shared_random": False,
+    },
+  )
   # cfg.events["joint_default_pos"].params["ranges"] = (-0.02, 0.02)
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso",)
   # cfg.events["torso_mass"].params["asset_cfg"].body_names = ("waist_yaw_link",)
   # 躯干(waist_yaw_link)质心前后移,对齐真机 gap。承载头+双臂,是上半身质量大头。
-  # cfg.events["waist_com_backward"] = EventTermCfg(
-  #   mode="startup",
-  #   func=envs_mdp.dr.body_com_offset,
-  #   params={
-  #     "asset_cfg": SceneEntityCfg("robot", body_names=("waist_yaw_link",)),
-  #     "operation": "add",
-  #     "ranges": {
-  #       0: (-WAIST_COM_BACKWARD_OFFSET, WAIST_COM_BACKWARD_OFFSET),  # 固定后偏
-  #       1: (0.0, 0.0),
-  #       2: (-0.2, 0.2),
-  #     },
-  #     "distribution": "uniform",
-  #   },
-  # )
+  cfg.events["waist_com_backward"] = EventTermCfg(
+    mode="startup",
+    func=envs_mdp.dr.body_com_offset,
+    params={
+      "asset_cfg": SceneEntityCfg("robot", body_names=("waist_yaw_link",)),
+      "operation": "add",
+      "ranges": {
+        0: (-WAIST_COM_BACKWARD_OFFSET, -WAIST_COM_BACKWARD_OFFSET),  # 固定后偏
+        1: (0.0, 0.0),
+        2: (0.0, 0.0),
+      },
+      "distribution": "uniform",
+    },
+  )
 
   cfg.events["init_motion_loader"].params["delay_reset_env_ratio"] = 0.4
   cfg.events["init_motion_loader"].params["max_delay_steps"] = 250
@@ -262,7 +262,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     "anchor_cfg"
   ].body_names = (anchor_name,)
   cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
-  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.5
+  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.45
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
@@ -271,7 +271,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
   cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
-  cfg.rewards["foot_slip"].weight = -0.5
+  cfg.rewards["foot_slip"].weight = -0.4
   cfg.rewards["feet_air_time"] = RewardTermCfg(
     func=mdp.feet_air_time,
     weight=0.3,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections import deque
+import csv
 from pathlib import Path
 import re
 import time
@@ -60,6 +61,8 @@ DEFAULT_VIEWER_HEIGHT = 1440
 DEFAULT_PRINT_EVERY = 1.0
 DEFAULT_REALTIME = True
 DEFAULT_ONNXRUNTIME_PROVIDER = "auto"
+DEFAULT_LOG_CSV = ""
+DEFAULT_LOG_DECIMATION = 1
 
 SIM_TIMESTEP = 0.005
 HISTORY_LENGTH = 4
@@ -301,6 +304,123 @@ def make_action_scale() -> np.ndarray:
   )
 
 
+def resolve_csv_path(log_csv: str, model_path: Path) -> Path | None:
+  """Resolve an optional PlotJuggler CSV output path."""
+  if not log_csv:
+    return None
+  if log_csv.lower() == "auto":
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    return (
+      REPO_ROOT
+      / "logs"
+      / "sim2sim_csv"
+      / f"{model_path.stem}_{timestamp}.csv"
+    )
+  path = Path(log_csv).expanduser()
+  return path if path.is_absolute() else REPO_ROOT / path
+
+
+class PlotJugglerCsvLogger:
+  """Write control and state signals in PlotJuggler's generic CSV format."""
+
+  def __init__(self, path: Path, flush_every: int = 200) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    self.path = path
+    self._file = path.open("w", newline="", buffering=1024 * 1024)
+    self._writer = csv.writer(self._file)
+    self._flush_every = max(int(flush_every), 1)
+    self._rows_written = 0
+
+    header = [
+      "time",
+      "sim/step",
+      "policy/update",
+      "command/vx_m_s",
+      "command/vy_m_s",
+      "command/yaw_rate_rad_s",
+      "base/position/x_m",
+      "base/position/y_m",
+      "base/position/z_m",
+      "base/orientation/qw",
+      "base/orientation/qx",
+      "base/orientation/qy",
+      "base/orientation/qz",
+      "base/orientation/pitch_rad",
+      "base/linear_velocity/x_m_s",
+      "base/linear_velocity/y_m_s",
+      "base/linear_velocity/z_m_s",
+      "base/angular_velocity/x_rad_s",
+      "base/angular_velocity/y_rad_s",
+      "base/angular_velocity/z_rad_s",
+      "com/relative_to_base/x_m",
+      "com/relative_to_base/y_m",
+      "com/relative_to_base/z_m",
+    ]
+    header.extend(
+      f"policy/action/{name}" for name in CASBOT02_LEG_ONLY_JOINT_NAMES
+    )
+    for signal, unit in (
+      ("target_position", "rad"),
+      ("position", "rad"),
+      ("velocity", "rad_s"),
+      ("position_error", "rad"),
+      ("actuator_force", "Nm"),
+      ("generalized_actuator_force", "Nm"),
+    ):
+      header.extend(
+        f"joint/{signal}/{name}_{unit}" for name in CASBOT02_23DOF_JOINT_NAMES
+      )
+    self._writer.writerow(header)
+
+  def write(
+    self,
+    step: int,
+    policy_updated: bool,
+    data: mujoco.MjData,
+    command: np.ndarray,
+    action: np.ndarray,
+    target_pos: np.ndarray,
+  ) -> None:
+    qpos = np.asarray(data.qpos[7:], dtype=np.float64)
+    qvel = np.asarray(data.qvel[6:], dtype=np.float64)
+    actuator_force = np.asarray(data.actuator_force, dtype=np.float64)
+    generalized_force = np.asarray(data.qfrc_actuator[6:], dtype=np.float64)
+    base_pos = np.asarray(data.qpos[0:3], dtype=np.float64)
+    base_quat = np.asarray(data.qpos[3:7], dtype=np.float64)
+    com_rel = np.asarray(data.subtree_com[0], dtype=np.float64) - base_pos
+    w, x, y, z = base_quat
+    pitch = np.arcsin(np.clip(2.0 * (w * y - z * x), -1.0, 1.0))
+
+    row: list[float | int] = [
+      float(data.time),
+      step,
+      int(policy_updated),
+      *command.tolist(),
+      *base_pos.tolist(),
+      *base_quat.tolist(),
+      float(pitch),
+      *np.asarray(data.qvel[0:3], dtype=np.float64).tolist(),
+      *np.asarray(data.qvel[3:6], dtype=np.float64).tolist(),
+      *com_rel.tolist(),
+      *np.asarray(action, dtype=np.float64).tolist(),
+      *np.asarray(target_pos, dtype=np.float64).tolist(),
+      *qpos.tolist(),
+      *qvel.tolist(),
+      *(target_pos - qpos).tolist(),
+      *actuator_force.tolist(),
+      *generalized_force.tolist(),
+    ]
+    self._writer.writerow(row)
+    self._rows_written += 1
+    if self._rows_written % self._flush_every == 0:
+      self._file.flush()
+
+  def close(self) -> None:
+    if not self._file.closed:
+      self._file.flush()
+      self._file.close()
+
+
 def make_viewer(model: mujoco.MjModel, data: mujoco.MjData, mode: str):
   try:
     import mujoco_viewer
@@ -410,7 +530,12 @@ def install_command_controls(viewer, command: np.ndarray) -> None:
   print("[sim2sim] speed controls: Up/Down vx, Left/Right yaw, Space zero")
 
 
-def run(model_arg: str = "") -> None:
+def run(
+  model_arg: str = "",
+  log_csv: str = DEFAULT_LOG_CSV,
+  log_decimation: int = DEFAULT_LOG_DECIMATION,
+  duration: float = DEFAULT_DURATION,
+) -> None:
   model_str = model_arg or DEFAULT_ONNX_MODEL
   if model_str:
     model_path = Path(model_str)
@@ -458,7 +583,11 @@ def run(model_arg: str = "") -> None:
 
   decimation = int(DEFAULT_DECIMATION)
   policy_dt = model.opt.timestep * decimation
-  total_steps = int(DEFAULT_DURATION / model.opt.timestep)
+  if duration <= 0.0:
+    raise ValueError(f"duration must be > 0, got {duration}")
+  total_steps = int(duration / model.opt.timestep)
+  if log_decimation < 1:
+    raise ValueError(f"log_decimation must be >= 1, got {log_decimation}")
   history: deque[np.ndarray] = deque(maxlen=history_length)
   last_action = np.zeros(NUM_OBS_JOINTS, dtype=np.float32)
   target_pos = default_joint_pos.copy()
@@ -466,7 +595,7 @@ def run(model_arg: str = "") -> None:
   print(
     "[sim2sim] "
     f"dt={model.opt.timestep}, decimation={decimation}, "
-    f"policy_hz={1.0 / policy_dt:.1f}, duration={DEFAULT_DURATION}s, "
+    f"policy_hz={1.0 / policy_dt:.1f}, duration={duration}s, "
     f"history_length={history_length}, single_frame={single_frame_obs_size}, "
     f"obs_layout={obs_layout}"
   )
@@ -480,13 +609,21 @@ def run(model_arg: str = "") -> None:
   viewer = make_viewer(model, data, DEFAULT_VIEWER_MODE)
   install_safe_mouse_callback(viewer)
   install_command_controls(viewer, command)
+  csv_path = resolve_csv_path(log_csv, model_path)
+  csv_logger = PlotJugglerCsvLogger(csv_path) if csv_path is not None else None
+  if csv_logger is not None:
+    print(
+      f"[sim2sim] recording PlotJuggler CSV at "
+      f"{1.0 / (model.opt.timestep * log_decimation):.1f} Hz: {csv_path}"
+    )
   next_time = time.perf_counter()
   try:
     for step in range(total_steps):
       if getattr(viewer, "is_alive", True) is False:
         break
 
-      if step % decimation == 0:
+      policy_updated = step % decimation == 0
+      if policy_updated:
         obs_frame = get_obs_frame(
           data,
           command,
@@ -563,6 +700,15 @@ def run(model_arg: str = "") -> None:
 
       data.ctrl[:] = target_pos
       mujoco.mj_step(model, data)
+      if csv_logger is not None and step % log_decimation == 0:
+        csv_logger.write(
+          step=step,
+          policy_updated=policy_updated,
+          data=data,
+          command=command,
+          action=last_action,
+          target_pos=target_pos,
+        )
       if step % DEFAULT_RENDER_DECIMATION == 0:
         viewer.render()
 
@@ -574,6 +720,9 @@ def run(model_arg: str = "") -> None:
         else:
           next_time = time.perf_counter()
   finally:
+    if csv_logger is not None:
+      csv_logger.close()
+      print(f"[sim2sim] PlotJuggler CSV saved: {csv_logger.path}")
     viewer.close()
 
   print("[sim2sim] finished.")
@@ -590,8 +739,32 @@ def parse_args() -> argparse.Namespace:
     default="",
     help="Optional ONNX model path. Empty uses the latest CASBOT02 leg AMP ONNX.",
   )
+  parser.add_argument(
+    "--log-csv",
+    nargs="?",
+    const="auto",
+    default=DEFAULT_LOG_CSV,
+    metavar="PATH",
+    help=(
+      "Record a PlotJuggler-compatible CSV. Pass no PATH to save automatically "
+      "under logs/sim2sim_csv."
+    ),
+  )
+  parser.add_argument(
+    "--log-decimation",
+    type=int,
+    default=DEFAULT_LOG_DECIMATION,
+    help="Record every N physics steps (default: 1 = 200 Hz).",
+  )
+  parser.add_argument(
+    "--duration",
+    type=float,
+    default=DEFAULT_DURATION,
+    help=f"Simulation duration in seconds (default: {DEFAULT_DURATION:g}).",
+  )
   return parser.parse_args()
 
 
 if __name__ == "__main__":
-  run(parse_args().model_path)
+  args = parse_args()
+  run(args.model_path, args.log_csv, args.log_decimation, args.duration)

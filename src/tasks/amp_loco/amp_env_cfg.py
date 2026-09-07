@@ -196,7 +196,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       heading_control_stiffness=0.5,
       debug_vis=True,
       ranges=UniformVelocityCommandCfg.Ranges(
-        lin_vel_x=(-0.5, 0.8),
+        lin_vel_x=(-1.0, 1.0),
         lin_vel_y=(0.0, 0.0),
         ang_vel_z=(-1.57, 1.57),
         heading=(-math.pi / 2, math.pi / 2),
@@ -334,9 +334,9 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     
     "is_terminated": RewardTermCfg(func=mdp.is_terminated, weight=-200.0),
-    "joint_acc_l2": RewardTermCfg(func=mdp.joint_acc_l2, weight=-2.5e-7),
+    "joint_acc_l2": RewardTermCfg(func=mdp.joint_acc_l2, weight=-5e-7),
     "joint_pos_limits": RewardTermCfg(func=mdp.joint_pos_limits, weight=-10.0),
-    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.01),
+    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.02),
     
     "foot_slip": RewardTermCfg(
       func=mdp.feet_slip,
@@ -350,7 +350,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-8e-4,#-5-2
+      weight=-1e-3,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",
