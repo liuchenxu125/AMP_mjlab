@@ -3,7 +3,6 @@
 import logging
 import os
 import sys
-from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -124,7 +123,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     runner_cls = MjlabOnPolicyRunner   # 
 
   runner_kwargs = {}
-  runner = runner_cls(env, deepcopy(agent_cfg), str(log_dir), device, **runner_kwargs)
+  runner = runner_cls(env, agent_cfg, str(log_dir), device, **runner_kwargs)
 
   runner.add_git_repo_to_log(__file__)
   if resume_path is not None:
