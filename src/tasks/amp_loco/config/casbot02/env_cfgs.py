@@ -194,7 +194,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       # The source URDF base_link is named torso in the MuJoCo model.
       "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
-      "ranges": (-0.5, 0.5),
+      "ranges": (-4.0, 4.0),
       "operation": "add",
       "distribution": "uniform",
     },
@@ -206,7 +206,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       "asset_cfg": SceneEntityCfg(
         "robot", body_names=(r"^(?!torso$).+$",)
       ),
-      "ranges": (0.9, 1.1),
+      "ranges": (0.80, 1.20),
       "operation": "scale",
       "distribution": "uniform",
       "shared_random": False,
@@ -261,7 +261,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0#1.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 1.5
   cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.5
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
@@ -271,10 +271,10 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
   cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
-  cfg.rewards["foot_slip"].weight = -0.4
+  cfg.rewards["foot_slip"].weight = -0.5
   cfg.rewards["feet_air_time"] = RewardTermCfg(
     func=mdp.feet_air_time,
-    weight=0.4,
+    weight=0.3,
     params={
       "sensor_name": "feet_ground_contact",
       "threshold_min": 0.05,
