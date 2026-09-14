@@ -261,17 +261,17 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["track_anchor_linear_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 1.5
+  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0
   cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.5
   cfg.rewards["track_anchor_angular_velocity"].params[
     "anchor_cfg"
   ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_angular_velocity"].weight = 1.5
+  cfg.rewards["track_anchor_angular_velocity"].weight = 2.0
   cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.5
   cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
   cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
   cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
-  cfg.rewards["foot_slip"].weight = -0.5
+  cfg.rewards["foot_slip"].weight = -0.4
   cfg.rewards["feet_air_time"] = RewardTermCfg(
     func=mdp.feet_air_time,
     weight=0.3,
@@ -333,9 +333,11 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.rewards["joint_acc_l2"].params["asset_cfg"] = SceneEntityCfg(
     "robot", joint_names=_leg_swing_joints, preserve_order=True
   )
+  # cfg.rewards["joint_acc_l2"].weight = -5.0e-7
   cfg.rewards["joint_pos_limits"].params["asset_cfg"] = SceneEntityCfg(
     "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
   )
+  cfg.rewards["action_rate_l2"].weight = -0.02
   # 力矩惩罚：只惩罚腿部 actuator 组（LEG_HEAVY + LEG_LIGHT），抑制髋 roll 极大力矩。
   # cfg.rewards["joint_torques_l2"] = RewardTermCfg(
   #   func=envs_mdp.joint_torques_l2,

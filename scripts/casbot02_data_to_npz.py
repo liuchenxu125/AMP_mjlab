@@ -96,6 +96,10 @@ class Casbot02Motion:
     output_fps: int,
     device: torch.device | str,
     skip_first_line: bool,
+    trim_start_frames: int = 0,
+    root_lateral_sign: float = 1.0,
+    root_yaw_sign: float = -1.0,
+    straighten_root: bool = False,
   ):
     self.input_file = Path(input_file)
     self.input_fps = input_fps
@@ -105,6 +109,20 @@ class Casbot02Motion:
     self.current_idx = 0
 
     raw = _load_raw_data(self.input_file, skip_first_line)
+    if trim_start_frames < 0:
+      raise ValueError("trim_start_frames must be non-negative")
+    if trim_start_frames >= raw.shape[0]:
+      raise ValueError(
+        f"{self.input_file}: cannot trim {trim_start_frames} frames from "
+        f"a motion containing {raw.shape[0]} frames"
+      )
+    if trim_start_frames > 0:
+      raw = raw[trim_start_frames:]
+      print(f"  [trim] removed {trim_start_frames} source frame(s)")
+    if root_lateral_sign not in (-1.0, 1.0):
+      raise ValueError("root_lateral_sign must be either -1 or 1")
+    if root_yaw_sign not in (-1.0, 1.0):
+      raise ValueError("root_yaw_sign must be either -1 or 1")
     if input_fps % output_fps != 0:
       raise ValueError(
         f"Expected integer downsample ratio, got {input_fps} -> {output_fps}"
@@ -113,11 +131,21 @@ class Casbot02Motion:
     raw = raw[::stride]
 
     self.output_frames = raw.shape[0]
+    root_pos = self._root_pos(raw, root_lateral_sign)
+    if straighten_root:
+      lateral_range = float(np.ptp(root_pos[:, 1]))
+      root_pos[:, 1] = root_pos[0, 1]
+      print(
+        f"  [straighten] fixed root y at {root_pos[0, 1]:.6f} m "
+        f"(removed {lateral_range:.6f} m peak-to-peak motion)"
+      )
     self.motion_base_poss = torch.tensor(
-      self._root_pos(raw), dtype=torch.float32, device=device
+      root_pos, dtype=torch.float32, device=device
     )
     self.motion_base_rots = torch.tensor(
-      self._root_quat_wxyz(raw), dtype=torch.float32, device=device
+      self._root_quat_wxyz(raw, root_yaw_sign),
+      dtype=torch.float32,
+      device=device,
     )
     self.motion_base_rots = _make_quat_continuous(self.motion_base_rots)
     self.motion_dof_poss = torch.tensor(
@@ -138,14 +166,22 @@ class Casbot02Motion:
       f"Loaded {self.input_file}: {self.output_frames} frames @ {output_fps} Hz"
     )
 
-  def _root_pos(self, raw: np.ndarray) -> np.ndarray:
+  def _root_pos(
+    self, raw: np.ndarray, root_lateral_sign: float
+  ) -> np.ndarray:
     root_pos_data = raw[:, 0:3].astype(np.float32)
     return np.stack(
-      [root_pos_data[:, 1], -root_pos_data[:, 0], root_pos_data[:, 2]],
+      [
+        root_pos_data[:, 1],
+        root_lateral_sign * root_pos_data[:, 0],
+        root_pos_data[:, 2],
+      ],
       axis=1,
     ).astype(np.float32)
 
-  def _root_quat_wxyz(self, raw: np.ndarray) -> np.ndarray:
+  def _root_quat_wxyz(
+    self, raw: np.ndarray, root_yaw_sign: float
+  ) -> np.ndarray:
     pyr = raw[:, 3:6].astype(np.float32)
     col4_mean = float(np.mean(pyr[:, 0]))
     if abs(col4_mean - PITCH_STANDING_OFFSET) < abs(col4_mean):
@@ -158,7 +194,7 @@ class Casbot02Motion:
       print(f"  [pitch] col4 mean={col4_mean:.4f} -> no offset")
 
     roll = pyr[:, 1]
-    yaw = -pyr[:, 2]
+    yaw = root_yaw_sign * pyr[:, 2]
     quat_xyzw = euler_pyr_to_quat_xyzw(np.stack([pitch, yaw, roll], axis=1))
     return quat_xyzw[:, [3, 0, 1, 2]].astype(np.float32)
 
@@ -216,6 +252,10 @@ def run_sim(
   output_name: str,
   output_dir: str | Path,
   skip_first_line: bool,
+  trim_start_frames: int,
+  root_lateral_sign: float,
+  root_yaw_sign: float,
+  straighten_root: bool,
 ):
   motion = Casbot02Motion(
     input_file=input_file,
@@ -223,6 +263,10 @@ def run_sim(
     output_fps=output_fps,
     device=sim.device,
     skip_first_line=skip_first_line,
+    trim_start_frames=trim_start_frames,
+    root_lateral_sign=root_lateral_sign,
+    root_yaw_sign=root_yaw_sign,
+    straighten_root=straighten_root,
   )
 
   robot: Entity = scene["robot"]
@@ -320,6 +364,10 @@ def main(
   output_fps: int = FPS_OUT,
   device: str = "cuda:0",
   skip_first_line: bool = True,
+  trim_start_frames: int = 0,
+  root_lateral_sign: float = 1.0,
+  root_yaw_sign: float = -1.0,
+  straighten_root: bool = False,
 ):
   """Replay CASBOT02 .data files on the 23DOF model and save AMP .npz files."""
   if input_file is None and input_dir is None:
@@ -357,6 +405,10 @@ def main(
       output_name=cur_output_name,
       output_dir=output_dir,
       skip_first_line=skip_first_line,
+      trim_start_frames=trim_start_frames,
+      root_lateral_sign=root_lateral_sign,
+      root_yaw_sign=root_yaw_sign,
+      straighten_root=straighten_root,
     )
 
 
