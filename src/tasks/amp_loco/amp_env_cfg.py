@@ -196,7 +196,7 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       heading_control_stiffness=0.5,
       debug_vis=True,
       ranges=UniformVelocityCommandCfg.Ranges(
-        lin_vel_x=(-0.6, 0.8),
+        lin_vel_x=(-1.0, 1.0),
         lin_vel_y=(0.0, 0.0),
         ang_vel_z=(-1.57, 1.57),
         heading=(-math.pi / 2, math.pi / 2),
@@ -317,13 +317,13 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
                 "delay_env_rew_ratio": 0.0,
                 "anchor_cfg": SceneEntityCfg("robot", body_names=()),},
     ),
-    "track_root_height": RewardTermCfg(
-      func=mdp.track_root_height,
-      weight=1.0,
-        params={"std": 0.3,
-                "mask_delay": True,
-                "delay_env_rew_ratio": 3.5},
-    ),
+    # "track_root_height": RewardTermCfg(
+    #   func=mdp.track_root_height,
+    #   weight=1.0,
+    #     params={"std": 0.3,
+    #             "mask_delay": True,
+    #             "delay_env_rew_ratio": 3.5},
+    # ),
     "body_ang_vel_xy_l2": RewardTermCfg(
       func=mdp.body_ang_vel_xy_l2,
       weight=0.5,
@@ -350,11 +350,11 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "soft_landing": RewardTermCfg(
       func=mdp.soft_landing,
-      weight=-1e-3,#-5-2
+      weight=-3e-3,#-5-2
       params={
         "sensor_name": "feet_ground_contact",
         "command_name": "twist",
-        "command_threshold": 0.1,
+        "command_threshold": 0.2,
       },
     ),
     "self_collisions": RewardTermCfg(
@@ -374,10 +374,10 @@ def make_amp_env_cfg() -> ManagerBasedRlEnvCfg:
       func=mdp.bad_orientation,
       params={"limit_angle": math.radians(70.0)},
     ),
-    "bad_base_height": TerminationTermCfg(
-      func=mdp.root_height_below_minimum,
-      params={"minimum_height": 0.5,},
-    ),
+    # "bad_base_height": TerminationTermCfg(
+    #   func=mdp.root_height_below_minimum,
+    #   params={"minimum_height": 0.2,},
+    # ),
   }
 
   ##

@@ -280,12 +280,6 @@ def reset_state(
   mujoco.mj_forward(model, data)
 
 
-def ctrl_range(model: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
-  lo = model.actuator_ctrlrange[:, 0].astype(np.float64).copy()
-  hi = model.actuator_ctrlrange[:, 1].astype(np.float64).copy()
-  return lo, hi
-
-
 def make_action_scale() -> np.ndarray:
   return np.array(
     [CASBOT02_23DOF_ACTION_SCALE[name] for name in CASBOT02_23DOF_JOINT_NAMES],
@@ -440,7 +434,6 @@ def run(model_arg: str = "") -> None:
   data = mujoco.MjData(model)
   default_joint_pos = make_default_joint_pos()
   action_scale = make_action_scale()
-  ctrl_lo, ctrl_hi = ctrl_range(model)
   command = np.array(
     [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW],
     dtype=np.float64,
@@ -502,7 +495,6 @@ def run(model_arg: str = "") -> None:
 
         last_action = action.astype(np.float32)
         target_pos = default_joint_pos + action.astype(np.float64) * action_scale
-        target_pos = np.clip(target_pos, ctrl_lo, ctrl_hi)
 
         viewer.cam.lookat = [
           float(data.qpos[0]),

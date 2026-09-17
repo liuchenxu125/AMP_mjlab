@@ -287,6 +287,29 @@ def soft_landing(
       cost = cost * active
   return cost
 
+def undesired_contacts(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  force_threshold: float = 1.0,
+) -> torch.Tensor:
+  """Penalize non-foot bodies contacting the terrain.
+
+  Returns the number of primary bodies whose contact force exceeds
+  ``force_threshold``. Falls back to the instantaneous ``found`` count
+  when force is unavailable.
+  """
+  sensor: ContactSensor = env.scene[sensor_name]
+  data = sensor.data
+  if data.force is not None:
+    in_contact = torch.norm(data.force, dim=-1) > force_threshold
+  else:
+    assert data.found is not None
+    in_contact = data.found > 0
+  cost = in_contact.float().sum(dim=-1)
+  env.extras["log"]["Metrics/undesired_contact_count"] = torch.mean(cost)
+  return cost
+
+
 def self_collision_cost(
   env: ManagerBasedRlEnv,
   sensor_name: str,

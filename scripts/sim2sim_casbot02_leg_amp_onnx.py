@@ -287,12 +287,6 @@ def reset_state(
   mujoco.mj_forward(model, data)
 
 
-def ctrl_range(model: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
-  lo = model.actuator_ctrlrange[:, 0].astype(np.float64).copy()
-  hi = model.actuator_ctrlrange[:, 1].astype(np.float64).copy()
-  return lo, hi
-
-
 def make_action_scale() -> np.ndarray:
   """Return action scales in the current 22-joint policy order."""
   return np.array(
@@ -573,7 +567,6 @@ def run(
   default_joint_pos = make_default_joint_pos()          # 23-dim all MuJoCo joints
   default_obs_joint_pos = make_obs_joint_pos()          # 12-dim leg-only obs joints
   action_scale = make_action_scale()                    # 22-dim policy actions
-  ctrl_lo, ctrl_hi = ctrl_range(model)
   command = np.array(
     [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW],
     dtype=np.float64,
@@ -655,7 +648,6 @@ def run(
         knee_diff = leg_l4 - leg_r4
         target_pos[12] = 0.5 * knee_diff + default_joint_pos[12]  # 左臂肩
         target_pos[17] = -0.5 * knee_diff + default_joint_pos[17]  # 右臂肩
-        target_pos = np.clip(target_pos, ctrl_lo, ctrl_hi)
 
         viewer.cam.lookat = [
           float(data.qpos[0]),

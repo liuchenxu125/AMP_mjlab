@@ -302,12 +302,6 @@ def reset_state(
   mujoco.mj_forward(model, data)
 
 
-def ctrl_range(model: mujoco.MjModel) -> tuple[np.ndarray, np.ndarray]:
-  lo = model.actuator_ctrlrange[:, 0].astype(np.float64).copy()
-  hi = model.actuator_ctrlrange[:, 1].astype(np.float64).copy()
-  return lo, hi
-
-
 def make_action_scale() -> np.ndarray:
   """Return 13-dim action scales for leg joints only."""
   return np.array(
@@ -321,8 +315,6 @@ def leg_action_to_full_target(
   action_scale: np.ndarray,
   default_leg_pos: np.ndarray,
   default_full_pos: np.ndarray,
-  ctrl_lo: np.ndarray,
-  ctrl_hi: np.ndarray,
 ) -> np.ndarray:
   """Map 13-dim leg action to 23-dim target_pos.
 
@@ -335,11 +327,10 @@ def leg_action_to_full_target(
     idx = CASBOT02_23DOF_JOINT_NAMES.index(name)
     full_action[idx] = leg_action[i] if i < len(leg_action) else 0.0
 
-  target = default_full_pos + full_action * np.array(
+  return default_full_pos + full_action * np.array(
     [CASBOT02_23DOF_ACTION_SCALE[name] for name in CASBOT02_23DOF_JOINT_NAMES],
     dtype=np.float64,
   )
-  return np.clip(target, ctrl_lo, ctrl_hi)
 
 
 def make_viewer(model: mujoco.MjModel, data: mujoco.MjData, mode: str):
@@ -490,7 +481,6 @@ def run(model_arg: str = "") -> None:
   default_joint_pos = make_default_joint_pos()          # 13-dim leg joints
   default_full_joint_pos = make_full_joint_pos()        # 23-dim all joints
   action_scale = make_action_scale()                     # 13-dim
-  ctrl_lo, ctrl_hi = ctrl_range(model)
   command = np.array(
     [DEFAULT_COMMAND_X, DEFAULT_COMMAND_Y, DEFAULT_COMMAND_YAW],
     dtype=np.float64,
@@ -554,7 +544,6 @@ def run(model_arg: str = "") -> None:
         target_pos = leg_action_to_full_target(
           action.astype(np.float64), action_scale,
           default_joint_pos, default_full_joint_pos,
-          ctrl_lo, ctrl_hi,
         )
 
         viewer.cam.lookat = [
