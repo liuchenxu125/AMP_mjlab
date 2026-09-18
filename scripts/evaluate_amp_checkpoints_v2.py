@@ -111,6 +111,12 @@ def main() -> None:
   parser.add_argument("--seed", type=int, default=20260903)
   parser.add_argument("--standing-only", action="store_true")
   parser.add_argument("--no-pushes", action="store_true")
+  parser.add_argument("--disable-curriculum", action="store_true")
+  parser.add_argument(
+    "--foot-site-names",
+    nargs=2,
+    default=("left_force", "right_force"),
+  )
   parser.add_argument("--lin-vel-x-range", nargs=2, type=float)
   parser.add_argument("--lin-vel-y-range", nargs=2, type=float)
   parser.add_argument("--ang-vel-z-range", nargs=2, type=float)
@@ -190,6 +196,8 @@ def main() -> None:
     twist_cfg.ranges.heading = None
   if args.no_pushes:
     env_cfg.events.pop("push_robot", None)
+  if args.disable_curriculum:
+    env_cfg.curriculum = {}
   args.output_dir.mkdir(parents=True, exist_ok=True)
   from mjlab.utils.os import dump_yaml
   dump_yaml(args.output_dir / "effective_env.yaml", env_cfg)
@@ -208,7 +216,7 @@ def main() -> None:
 
   robot = base_env.scene["robot"]
   contact = base_env.scene["feet_ground_contact"]
-  foot_ids, _ = robot.find_sites(("left_force", "right_force"), preserve_order=True)
+  foot_ids, _ = robot.find_sites(tuple(args.foot_site_names), preserve_order=True)
   leg_ids, _ = robot.find_joints(
     (
       "leg_l1_joint", "leg_l2_joint", "leg_l3_joint", "leg_l4_joint",
@@ -409,10 +417,16 @@ def main() -> None:
     "metric_version": 2,
     "standing_only": args.standing_only,
     "no_pushes": args.no_pushes,
+    "curriculum_enabled": not args.disable_curriculum,
+    "foot_site_names": args.foot_site_names,
     "standing_definition": "command norm < 1e-6",
     "stance_frame": "root yaw frame",
     "tail_definition": "pooled contact samples",
-    "joint_acc_weight": env_cfg.rewards["joint_acc_l2"].weight,
+    "joint_acc_weight": (
+      env_cfg.rewards["joint_acc_l2"].weight
+      if "joint_acc_l2" in env_cfg.rewards
+      else None
+    ),
     "action_rate_weight": env_cfg.rewards["action_rate_l2"].weight,
     "foot_slip_weight": env_cfg.rewards["foot_slip"].weight,
     "soft_landing_weight": env_cfg.rewards["soft_landing"].weight,

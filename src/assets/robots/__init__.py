@@ -42,3 +42,9 @@ from .casbot02.casbot02_constants import (
 from .casbot02.casbot02_constants import (
   CASBOT02_LEG_ONLY_ACTION_SCALE as CASBOT02_LEG_ONLY_ACTION_SCALE,
 )
+from .casbot02.casbot02_constants import (
+  CASBOT02_FOOT_SITE_NAMES as CASBOT02_FOOT_SITE_NAMES,
+)
+from .casbot02.casbot02_constants import (
+  CASBOT02_FOOT_GEOM_NAMES as CASBOT02_FOOT_GEOM_NAMES,
+)

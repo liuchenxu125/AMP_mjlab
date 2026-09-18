@@ -92,6 +92,12 @@ CASBOT02_LEG_JOINT_NAMES: tuple[str, ...] = (
 
 CASBOT02_LEG_ONLY_JOINT_NAMES: tuple[str, ...] = CASBOT02_LEG_JOINT_NAMES
 
+CASBOT02_FOOT_SITE_NAMES: tuple[str, ...] = ("left_foot", "right_foot")
+CASBOT02_FOOT_GEOM_NAMES: tuple[str, ...] = (
+  "left_foot_collision",
+  "right_foot_collision",
+)
+
 CASBOT02_22DOF_NO_WAIST_JOINT_NAMES: tuple[str, ...] = tuple(
   name for name in CASBOT02_23DOF_JOINT_NAMES if name != "waist_yaw_joint"
 )
@@ -121,6 +127,27 @@ def get_spec() -> mujoco.MjSpec:
   # action semantics consistent with JointPositionActionCfg.
   for act in list(spec.actuators):
     spec.delete(act)
+
+  # Sole-center sites (source XML only has ankle-origin left_force/right_force).
+  # Positions match HANDOFF casbot02_constants: mesh sole z=-0.0648 m, contact
+  # patch x in [-0.09394, 0.16354] m, center x≈0.0348 m.
+  foot_sole_site_pos = [0.0348, 0.0, -0.0648]
+  for body_name, site_name in (
+    ("leg_l6_link", "left_foot"),
+    ("leg_r6_link", "right_foot"),
+  ):
+    for body in spec.worldbody.find_all("body"):
+      if body.name == body_name:
+        site = body.add_site(name=site_name)
+        site.pos = foot_sole_site_pos
+        break
+
+  spec.add_sensor(
+    name="root_angmom",
+    type=mujoco.mjtSensor.mjSENS_SUBTREEANGMOM,
+    objtype=mujoco.mjtObj.mjOBJ_BODY,
+    objname="torso",
+  )
 
   return spec
 

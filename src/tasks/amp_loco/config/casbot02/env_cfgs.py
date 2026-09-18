@@ -1,21 +1,24 @@
 """CASBOT02 AMP Locomotion environment configurations."""
 
+import math
 import os
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
+from mjlab.managers.curriculum_manager import CurriculumTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg, RayCastSensorCfg
-from mjlab.tasks.velocity import mdp
+from mjlab.tasks.velocity import mdp as velocity_mdp
 
 from src.assets.robots import (
   CASBOT02_23DOF_ACTION_SCALE,
   CASBOT02_23DOF_AMP_BODY_NAMES,
-  CASBOT02_23DOF_JOINT_NAMES,
+  CASBOT02_FOOT_GEOM_NAMES,
+  CASBOT02_FOOT_SITE_NAMES,
   CASBOT02_LEG_ONLY_JOINT_NAMES,
   get_casbot02_23dof_robot_cfg,
 )
@@ -27,6 +30,253 @@ from src.tasks.velocity.mdp import UniformVelocityCommandCfg
 # 真机站立后倾、sim 前倾,说明真机上半身(头+双臂挂在 waist_yaw_link)质心比模型更靠后。
 # 把 sim 的 waist_yaw_link 质心固定后移 3cm,让策略在训练时就学会往前压应对。
 WAIST_COM_BACKWARD_OFFSET = 0.02
+
+
+def _leg_asset() -> SceneEntityCfg:
+  return SceneEntityCfg(
+    "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
+  )
+
+
+def _torso_asset() -> SceneEntityCfg:
+  return SceneEntityCfg("robot", body_names=("torso",))
+
+
+def _feet_body_asset() -> SceneEntityCfg:
+  return SceneEntityCfg(
+    "robot", body_names=("leg_l6_link", "leg_r6_link"), preserve_order=True
+  )
+
+
+def _feet_site_asset() -> SceneEntityCfg:
+  return SceneEntityCfg(
+    "robot", site_names=CASBOT02_FOOT_SITE_NAMES, preserve_order=True
+  )
+
+
+def _knee_body_asset() -> SceneEntityCfg:
+  return SceneEntityCfg(
+    "robot",
+    body_names=("leg_l4_link", "leg_l3_link", "leg_r4_link", "leg_r3_link"),
+    preserve_order=True,
+  )
+
+
+def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
+  """Replace AMP task rewards with the HANDOFF Casbot02 loco-teacher stack.
+
+  Velocity tracking uses mjlab body-frame root velocity (same formula as
+  loco). Swing-height and pose terms are omitted so AMP style is not fought
+  by an explicit gait/posture prior. Remaining foot terms still use the
+  loco sole sites ``left_foot`` / ``right_foot``.
+  """
+  rewards = cfg.rewards
+  for name in (
+    "body_ang_vel_xy_l2",
+    "is_terminated",
+    "joint_acc_l2",
+    "joint_pos_limits",
+    "standing_feet_slip",
+    "standing_foot_distance",
+    "feet_air_time",
+    "flat_orientation_l2",
+    "undesired_contacts",
+    "foot_clearance",
+    "track_anchor_linear_velocity",
+    "track_anchor_angular_velocity",
+    "pose",
+    "swing_height_curve",
+    "foot_swing_height",
+  ):
+    rewards.pop(name, None)
+
+  rewards["track_linear_velocity"] = RewardTermCfg(
+    func=velocity_mdp.track_linear_velocity,
+    weight=2.0,
+    params={"command_name": "twist", "std": 0.5, "asset_cfg": _torso_asset()},
+  )
+  rewards["track_angular_velocity"] = RewardTermCfg(
+    func=velocity_mdp.track_angular_velocity,
+    weight=2.0,
+    params={"command_name": "twist", "std": 0.7071, "asset_cfg": _torso_asset()},
+  )
+  rewards["upright"] = RewardTermCfg(
+    func=velocity_mdp.flat_orientation,
+    weight=1.0,
+    params={"std": math.sqrt(0.2), "asset_cfg": _torso_asset()},
+  )
+  rewards["body_ang_vel"] = RewardTermCfg(
+    func=velocity_mdp.body_angular_velocity_penalty,
+    weight=-0.05,
+    params={"asset_cfg": _torso_asset()},
+  )
+  rewards["angular_momentum"] = RewardTermCfg(
+    func=velocity_mdp.angular_momentum_penalty,
+    weight=-0.02,
+    params={"sensor_name": "robot/root_angmom"},
+  )
+  rewards["dof_pos_limits"] = RewardTermCfg(
+    func=envs_mdp.joint_pos_limits,
+    weight=-1.0,
+    params={"asset_cfg": _leg_asset()},
+  )
+  rewards["action_rate_l2"].weight = -0.1
+
+  rewards["air_time"] = RewardTermCfg(
+    func=amp_mdp.command_conditioned_feet_air_time,
+    weight=1.0,
+    params={
+      "sensor_name": "feet_ground_contact",
+      "threshold_min": 0.05,
+      "translation_threshold_max": 0.65,
+      "turning_threshold_max": 0.42,
+      "command_name": "twist",
+      "command_threshold": 0.2,
+      "turning_linear_threshold": 0.2,
+      "turning_angular_threshold": 0.2,
+    },
+  )
+  rewards["foot_slip"].func = velocity_mdp.feet_slip
+  rewards["foot_slip"].weight = -2.0
+  rewards["foot_slip"].params["asset_cfg"] = _feet_site_asset()
+  rewards["foot_slip"].params["command_threshold"] = 0.05
+  rewards["soft_landing"].func = velocity_mdp.soft_landing
+  rewards["soft_landing"].weight = -6e-3
+  rewards["soft_landing"].params["command_threshold"] = 0.05
+
+  rewards["stand_pose"] = RewardTermCfg(
+    func=amp_mdp.stand_pose,
+    weight=-4.0,
+    params={"command_name": "twist", "asset_cfg": _leg_asset()},
+  )
+  # rewards["feet_distance_lateral"] = RewardTermCfg(
+  #   func=amp_mdp.feet_distance_lateral,
+  #   weight=2.5,
+  #   params={
+  #     "asset_cfg": _feet_site_asset(),
+  #     "min_distance": 0.266,
+  #     "max_distance": 0.40,
+  #   },
+  # )
+  # rewards["knee_distance_lateral"] = RewardTermCfg(
+  #   func=amp_mdp.knee_distance_lateral,
+  #   weight=2.5,
+  #   params={
+  #     "asset_cfg": _knee_body_asset(),
+  #     "min_distance": 0.279,
+  #     "max_distance": 0.32,
+  #   },
+  # )
+  # rewards["flat_foot"] = RewardTermCfg(
+  #   func=amp_mdp.flat_foot,
+  #   weight=-0.5,
+  #   params={
+  #     "sensor_name": "feet_ground_contact",
+  #     "asset_cfg": _feet_body_asset(),
+  #   },
+  # )
+  rewards["self_collisions"] = RewardTermCfg(
+    func=velocity_mdp.self_collision_cost,
+    weight=-1.0,
+    params={"sensor_name": "self_collision", "force_threshold": 10.0},
+  )
+
+
+def _apply_casbot02_twist(cfg: ManagerBasedRlEnvCfg) -> None:
+  """HANDOFF loco teacher command sampling and velocity curriculum.
+
+  AMP style already covers rest-to-walk, so the old 10% stand-then-go lane
+  is folded into the dedicated forward cohort (0.2 → 0.3), matching loco.
+  """
+  base_twist_cmd = cfg.commands["twist"]
+  assert isinstance(base_twist_cmd, UniformVelocityCommandCfg)
+  vx, vy, wz = (-1.0, 1.0), (0.0, 0.0), (-1.0, 1.0)
+  twist_cmd = amp_mdp.Casbot02VelocityCommandCfg(
+    resampling_time_range=base_twist_cmd.resampling_time_range,
+    debug_vis=base_twist_cmd.debug_vis,
+    entity_name=base_twist_cmd.entity_name,
+    heading_command=True,
+    heading_control_stiffness=base_twist_cmd.heading_control_stiffness,
+    rel_standing_envs=0.1,
+    rel_turning_envs=0.2,
+    rel_backward_envs=0.0,
+    rel_stand_then_go_envs=0.0,
+    rel_heading_envs=0.2,
+    rel_world_envs=0.0,
+    rel_forward_envs=0.3,
+    init_velocity_prob=0.0,
+    min_turning_ang_vel=0.2,
+    ranges=amp_mdp.Casbot02VelocityCommandCfg.Ranges(
+      lin_vel_x=vx,
+      lin_vel_y=vy,
+      ang_vel_z=wz,
+      heading=(-math.pi, math.pi),
+    ),
+    viz=base_twist_cmd.viz,
+  )
+  twist_cmd.viz.z_offset = 1.15
+  cfg.commands["twist"] = twist_cmd
+  cfg.curriculum["command_vel"] = CurriculumTermCfg(
+    func=velocity_mdp.commands_vel,
+    params={
+      "command_name": "twist",
+      "velocity_stages": [
+        {
+          "step": 0,
+          "lin_vel_x": (vx[0] * 0.5, vx[1] * 0.5),
+          "lin_vel_y": vy,
+          "ang_vel_z": (wz[0] * 0.5, wz[1] * 0.5),
+        },
+        {
+          "step": 5000 * 24,
+          "lin_vel_x": vx,
+          "lin_vel_y": vy,
+          "ang_vel_z": wz,
+        },
+      ],
+    },
+  )
+
+
+def _apply_casbot02_push(cfg: ManagerBasedRlEnvCfg) -> None:
+  """Match loco / mjlab default interval push (planar + vertical + tilt)."""
+  push_robot = cfg.events["push_robot"]
+  push_robot.interval_range_s = (1.0, 3.0)
+  push_robot.params["velocity_range"] = {
+    "x": (-0.5, 0.5),
+    "y": (-0.5, 0.5),
+    "z": (-0.4, 0.4),
+    "roll": (-0.52, 0.52),
+    "pitch": (-0.52, 0.52),
+    "yaw": (-0.78, 0.78),
+  }
+
+
+def _apply_casbot02_reset(cfg: ManagerBasedRlEnvCfg) -> None:
+  """Stand from default pose like the HANDOFF loco teacher, not motion frames."""
+  cfg.events.pop("reset_from_motion", None)
+  cfg.events["reset_base"] = EventTermCfg(
+    func=envs_mdp.reset_root_state_uniform,
+    mode="reset",
+    params={
+      "pose_range": {
+        "x": (-0.5, 0.5),
+        "y": (-0.5, 0.5),
+        "z": (0.01, 0.05),
+        "yaw": (-3.14, 3.14),
+      },
+      "velocity_range": {},
+    },
+  )
+  cfg.events["reset_robot_joints"] = EventTermCfg(
+    func=envs_mdp.reset_joints_by_offset,
+    mode="reset",
+    params={
+      "position_range": (0.0, 0.0),
+      "velocity_range": (0.0, 0.0),
+      "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+    },
+  )
 
 
 def _add_casbot02_phase_observation(group) -> None:
@@ -71,10 +321,8 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       assert isinstance(sensor, RayCastSensorCfg)
       sensor.frame.name = "torso"
 
-  site_names = ("left_force", "right_force")
   feet_body_pattern = r"^(leg_l6_link|leg_r6_link)$"
   anchor_name = "torso"
-  root_name = "torso"
 
   feet_ground_cfg = ContactSensorCfg(
     name="feet_ground_contact",
@@ -132,12 +380,6 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
   cfg.viewer.body_name = "torso"
 
-  twist_cmd = cfg.commands["twist"]
-  assert isinstance(twist_cmd, UniformVelocityCommandCfg)
-  twist_cmd.viz.z_offset = 1.15
-  twist_cmd.ranges.lin_vel_y = (-0.3, 0.3)
-  # twist_cmd.ang_vel_deadband = 0.3  # 去掉 deadband，让策略学习全范围转弯命令
-
   # Randomize only the two foot collision geoms. The corresponding MJCF geoms
   # are explicitly named so this selection remains stable if geom order changes.
   cfg.events["foot_friction"] = EventTermCfg(
@@ -146,7 +388,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     params={
       "asset_cfg": SceneEntityCfg(
         "robot",
-        geom_names=("left_foot_collision", "right_foot_collision"),
+        geom_names=CASBOT02_FOOT_GEOM_NAMES,
         preserve_order=True,
       ),
       "operation": "abs",
@@ -164,19 +406,6 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
       ),
       "kp_range": (0.85, 1.15),
       "kd_range": (0.85, 1.15),
-      "operation": "scale",
-      "distribution": "uniform",
-    },
-  )
-  cfg.events["actuator_effort_limits"] = EventTermCfg(
-    mode="startup",
-    func=amp_mdp.effort_limits_with_delayed_actuators,
-    params={
-      "asset_cfg": SceneEntityCfg(
-        "robot",
-        actuator_ids=[0, 1],  # 腿部 actuator 组（LEG_HEAVY + LEG_LIGHT）
-      ),
-      "effort_limit_range": (0.85, 1.15),
       "operation": "scale",
       "distribution": "uniform",
     },
@@ -269,112 +498,11 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
   cfg.events["init_motion_loader"].params["motion_dir"] = _motion_dir
   cfg.events["init_motion_loader"].params["recovery_dir"] = None
-  cfg.events["reset_from_motion"].params["motion_dir"] = _motion_dir
-  cfg.events["reset_from_motion"].params["asset_cfg"] = SceneEntityCfg(
-    "robot",
-    joint_names=CASBOT02_23DOF_JOINT_NAMES,
-    preserve_order=True,
-  )
 
-  cfg.rewards["track_anchor_linear_velocity"].params[
-    "anchor_cfg"
-  ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_linear_velocity"].weight = 2.0
-  cfg.rewards["track_anchor_linear_velocity"].params["std"] = 0.5
-  cfg.rewards["track_anchor_angular_velocity"].params[
-    "anchor_cfg"
-  ].body_names = (anchor_name,)
-  cfg.rewards["track_anchor_angular_velocity"].weight = 2.0
-  cfg.rewards["track_anchor_angular_velocity"].params["std"] = 0.5
-  cfg.rewards["foot_slip"].params["asset_cfg"].site_names = site_names
-  cfg.rewards["foot_slip"].params["asset_cfg"].preserve_order = True
-  cfg.rewards["foot_slip"].params["command_threshold"] = 0.2
-  cfg.rewards["foot_slip"].weight = -1.0
-  cfg.rewards["feet_air_time"] = RewardTermCfg(
-    func=mdp.feet_air_time,
-    weight=0.5,
-    params={
-      "sensor_name": "feet_ground_contact",
-      "threshold_min": 0.05,
-      "threshold_max": 0.5,
-      "command_name": "twist",
-      "command_threshold": 0.2,
-    },
-  )
-  cfg.rewards["standing_feet_slip"] = RewardTermCfg(
-    func=amp_mdp.standing_feet_slip,
-    weight=-1.0,#-2
-    params={
-      "sensor_name": "feet_ground_contact",
-      "command_name": "twist",
-      "command_threshold": 0.2,
-      "asset_cfg": SceneEntityCfg(
-        "robot",
-        site_names=site_names,
-        preserve_order=True,
-      ),
-    },
-  )
-  cfg.rewards["standing_foot_distance"] = RewardTermCfg(
-    func=amp_mdp.standing_foot_distance,
-    weight=-3.0,#-10
-    params={
-      "command_name": "twist",
-      "command_threshold": 0.2,
-      "target_lateral_distance": 0.285,
-      "target_fore_distance": 0.0,
-      "asset_cfg": SceneEntityCfg(
-        "robot",
-        site_names=site_names,
-        preserve_order=True,
-      ),
-    },
-  )
-  cfg.rewards["self_collisions"] = RewardTermCfg(
-    func=mdp.self_collision_cost,
-    weight=-0.1,
-    params={"sensor_name": self_collision_cfg.name, "force_threshold": 10.0},
-  )
-  # cfg.rewards["undesired_contacts"] = RewardTermCfg(
-  #   func=amp_mdp.undesired_contacts,
-  #   weight=-1.0,
-  #   params={
-  #     "sensor_name": non_foot_ground_cfg.name,
-  #     "force_threshold": 1.0,
-  #   },
-  # )
-  cfg.rewards["flat_orientation_l2"] = RewardTermCfg(
-    func=envs_mdp.flat_orientation_l2,
-    weight=-0.5,
-    params={"asset_cfg": SceneEntityCfg("robot")},
-  )
-  cfg.rewards["body_ang_vel_xy_l2"].params["body_cfg"].body_names = (root_name,)
-
-  # 关节级奖励/DR 只作用腿部关节（手臂由摆臂公式控制，不经网络）。
-  # joint_acc_l2 保留两个摆臂肩关节（upper_left_1/upper_right_1），其余手臂去掉。
-  _leg_swing_joints = CASBOT02_LEG_ONLY_JOINT_NAMES + (
-    "upper_left_1_joint",
-    "upper_right_1_joint",
-  )
-  cfg.rewards["joint_acc_l2"].params["asset_cfg"] = SceneEntityCfg(
-    "robot", joint_names=_leg_swing_joints, preserve_order=True
-  )
-  # cfg.rewards["joint_acc_l2"].weight = -5.0e-7
-  cfg.rewards["joint_pos_limits"].params["asset_cfg"] = SceneEntityCfg(
-    "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
-  )
-  # cfg.rewards["action_rate_l2"].weight = -0.02
-  # 力矩惩罚：只惩罚腿部 actuator 组（LEG_HEAVY + LEG_LIGHT），抑制髋 roll 极大力矩。
-  # cfg.rewards["joint_torques_l2"] = RewardTermCfg(
-  #   func=envs_mdp.joint_torques_l2,
-  #   weight=-1e-7,
-  #   params={
-  #     "asset_cfg": SceneEntityCfg(
-  #       "robot",
-  #       actuator_ids=[0, 1],  # 腿部 actuator 组（LEG_HEAVY + LEG_LIGHT）
-  #     ),
-  #   },
-  # )
+  _apply_casbot02_loco_rewards(cfg)
+  _apply_casbot02_twist(cfg)
+  _apply_casbot02_push(cfg)
+  _apply_casbot02_reset(cfg)
 
   cfg.observations["critic"].terms["body_pos_b"].params[
     "anchor_cfg"
@@ -451,12 +579,5 @@ def casbot02_amp_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
   cfg.scene.sensors = tuple(
     s for s in (cfg.scene.sensors or ()) if s.name != "terrain_scan"
   )
-
-  if play:
-    twist_cmd = cfg.commands["twist"]
-    assert isinstance(twist_cmd, UniformVelocityCommandCfg)
-    twist_cmd.ranges.lin_vel_x = (-1.0, 1.0)
-    twist_cmd.ranges.lin_vel_y = (-0.3, 0.3)
-    twist_cmd.ranges.ang_vel_z = (-1.6, 1.6)
 
   return cfg

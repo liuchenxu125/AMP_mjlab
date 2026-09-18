@@ -3,6 +3,7 @@
 import os
 
 from src.assets.robots import CASBOT02_LEG_AMP_BODY_NAMES
+from src.tasks.amp_loco.config.casbot02.rl_cfg import _with_loco_symmetry
 from src.tasks.amp_loco.config.g1.rl_cfg import g1_amp_ppo_runner_cfg
 
 
@@ -24,6 +25,7 @@ _MOTION_DATA_DIR = os.path.join(
 def casbot02_leg_amp_ppo_runner_cfg():
   """Create RL runner configuration for CASBOT02 lower-body-observation AMP task."""
   cfg = g1_amp_ppo_runner_cfg()
+  _with_loco_symmetry(cfg)
   cfg.experiment_name = "casbot02_leg_amp_locomotion"
   cfg.amp_reward_coef = 0.1
   cfg.save_interval = 1000
