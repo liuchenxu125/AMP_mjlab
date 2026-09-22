@@ -6,7 +6,6 @@ import os
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
-from mjlab.managers.curriculum_manager import CurriculumTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
@@ -35,6 +34,17 @@ WAIST_COM_BACKWARD_OFFSET = 0.02
 def _leg_asset() -> SceneEntityCfg:
   return SceneEntityCfg(
     "robot", joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES, preserve_order=True
+  )
+
+
+def _ankle_pitch_torque_asset() -> SceneEntityCfg:
+  """Only ankle pitch: the joints that actually saturate in sim2sim."""
+  ankle_pitch = ("leg_l5_joint", "leg_r5_joint")
+  return SceneEntityCfg(
+    "robot",
+    joint_names=ankle_pitch,
+    actuator_names=list(ankle_pitch),
+    preserve_order=True,
   )
 
 
@@ -120,33 +130,38 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
     weight=-1.0,
     params={"asset_cfg": _leg_asset()},
   )
+  rewards["joint_torques_l2"] = RewardTermCfg(
+    func=envs_mdp.joint_torques_l2,
+    weight=-1.0e-5,
+    params={"asset_cfg": _ankle_pitch_torque_asset()},
+  )
+  rewards["joint_energy"] = RewardTermCfg(
+    func=amp_mdp.joint_energy,
+    weight=-1.0e-4,
+    params={"asset_cfg": _ankle_pitch_torque_asset()},
+  )
   rewards["action_rate_l2"].weight = -0.1
 
   rewards["air_time"] = RewardTermCfg(
     func=amp_mdp.command_conditioned_feet_air_time,
-    weight=1.0,
+    weight=1.5,
     params={
       "sensor_name": "feet_ground_contact",
-      "threshold_min": 0.05,
-      "translation_threshold_max": 0.65,
-      "turning_threshold_max": 0.42,
       "command_name": "twist",
       "command_threshold": 0.2,
-      "turning_linear_threshold": 0.2,
-      "turning_angular_threshold": 0.2,
     },
   )
   rewards["foot_slip"].func = velocity_mdp.feet_slip
-  rewards["foot_slip"].weight = -2.0
+  rewards["foot_slip"].weight = -1.0
   rewards["foot_slip"].params["asset_cfg"] = _feet_site_asset()
   rewards["foot_slip"].params["command_threshold"] = 0.05
   rewards["soft_landing"].func = velocity_mdp.soft_landing
-  rewards["soft_landing"].weight = -6e-3
+  rewards["soft_landing"].weight = -3e-3
   rewards["soft_landing"].params["command_threshold"] = 0.05
 
   rewards["stand_pose"] = RewardTermCfg(
     func=amp_mdp.stand_pose,
-    weight=-4.0,
+    weight=-5.0,
     params={"command_name": "twist", "asset_cfg": _leg_asset()},
   )
   # rewards["feet_distance_lateral"] = RewardTermCfg(
@@ -183,59 +198,39 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
 
 
 def _apply_casbot02_twist(cfg: ManagerBasedRlEnvCfg) -> None:
-  """HANDOFF loco teacher command sampling and velocity curriculum.
+  """G1 AMP ranges with an extra straight-walk cohort.
 
-  AMP style already covers rest-to-walk, so the old 10% stand-then-go lane
-  is folded into the dedicated forward cohort (0.2 → 0.3), matching loco.
+  Mix: 5% stand, 25% heading (sampled ``vx``, yaw from heading error),
+  20% pure forward (``vx>0``, ``vy=wz=0``). The remaining 50% keep G1
+  uniform ``vx`` and ``wz``.
   """
-  base_twist_cmd = cfg.commands["twist"]
-  assert isinstance(base_twist_cmd, UniformVelocityCommandCfg)
-  vx, vy, wz = (-1.0, 1.0), (0.0, 0.0), (-1.0, 1.0)
+  base = cfg.commands["twist"]
+  assert isinstance(base, UniformVelocityCommandCfg)
   twist_cmd = amp_mdp.Casbot02VelocityCommandCfg(
-    resampling_time_range=base_twist_cmd.resampling_time_range,
-    debug_vis=base_twist_cmd.debug_vis,
-    entity_name=base_twist_cmd.entity_name,
+    resampling_time_range=base.resampling_time_range,
+    debug_vis=base.debug_vis,
+    entity_name=base.entity_name,
     heading_command=True,
-    heading_control_stiffness=base_twist_cmd.heading_control_stiffness,
-    rel_standing_envs=0.1,
-    rel_turning_envs=0.2,
+    heading_control_stiffness=base.heading_control_stiffness,
+    rel_standing_envs=0.05,
+    rel_turning_envs=0.0,
     rel_backward_envs=0.0,
     rel_stand_then_go_envs=0.0,
-    rel_heading_envs=0.2,
+    rel_heading_envs=0.25,
     rel_world_envs=0.0,
-    rel_forward_envs=0.3,
-    init_velocity_prob=0.0,
-    min_turning_ang_vel=0.2,
+    rel_forward_envs=0.2,
+    init_velocity_prob=base.init_velocity_prob,
     ranges=amp_mdp.Casbot02VelocityCommandCfg.Ranges(
-      lin_vel_x=vx,
-      lin_vel_y=vy,
-      ang_vel_z=wz,
-      heading=(-math.pi, math.pi),
+      lin_vel_x=base.ranges.lin_vel_x,
+      lin_vel_y=base.ranges.lin_vel_y,
+      ang_vel_z=base.ranges.ang_vel_z,
+      heading=base.ranges.heading,
     ),
-    viz=base_twist_cmd.viz,
+    viz=base.viz,
   )
   twist_cmd.viz.z_offset = 1.15
   cfg.commands["twist"] = twist_cmd
-  cfg.curriculum["command_vel"] = CurriculumTermCfg(
-    func=velocity_mdp.commands_vel,
-    params={
-      "command_name": "twist",
-      "velocity_stages": [
-        {
-          "step": 0,
-          "lin_vel_x": (vx[0] * 0.5, vx[1] * 0.5),
-          "lin_vel_y": vy,
-          "ang_vel_z": (wz[0] * 0.5, wz[1] * 0.5),
-        },
-        {
-          "step": 5000 * 24,
-          "lin_vel_x": vx,
-          "lin_vel_y": vy,
-          "ang_vel_z": wz,
-        },
-      ],
-    },
-  )
+  cfg.curriculum.pop("command_vel", None)
 
 
 def _apply_casbot02_push(cfg: ManagerBasedRlEnvCfg) -> None:

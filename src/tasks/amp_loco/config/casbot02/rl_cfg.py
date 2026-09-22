@@ -47,8 +47,8 @@ def casbot02_amp_ppo_runner_cfg():
   _with_loco_symmetry(cfg)
   cfg.experiment_name = "casbot02_amp_locomotion"
   cfg.save_interval = 1000
-  cfg.amp_reward_coef = 0.1
-  # cfg.amp_task_reward_lerp = 0.25
+  cfg.amp_reward_coef = 0.2
+  cfg.amp_task_reward_lerp = 0.25
   cfg.amp_motion_files = os.path.normpath(
     os.path.join(_MOTION_DATA_DIR, "WalkandRun_TurnBoost_v1")
   )

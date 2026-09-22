@@ -584,42 +584,28 @@ class command_conditioned_feet_swing_height:
 def command_conditioned_feet_air_time(
   env: ManagerBasedRlEnv,
   sensor_name: str,
-  threshold_min: float = 0.05,
-  translation_threshold_max: float = 0.60,
-  turning_threshold_max: float = 0.42,
   command_name: str = "twist",
   command_threshold: float = 0.2,
-  turning_linear_threshold: float = 0.2,
-  turning_angular_threshold: float = 0.2,
 ) -> torch.Tensor:
-  """Dense air-time reward with a shorter window for in-place turns."""
+  """Reward currently airborne feet while a motion command is active.
+
+  Cadence and swing duration are left to AMP. This term only gates the
+  bonus off during stand commands so the robot is not paid to march in place.
+  """
   sensor: ContactSensor = env.scene[sensor_name]
   current_air_time = sensor.data.current_air_time
   assert current_air_time is not None
   command = env.command_manager.get_command(command_name)
   assert command is not None
-  turn_blend = command_turning_blend(
-    command,
-    turning_linear_threshold=turning_linear_threshold,
-    turning_angular_threshold=turning_angular_threshold,
-  )
-  threshold_max = torch.lerp(
-    torch.full_like(turn_blend, translation_threshold_max),
-    torch.full_like(turn_blend, turning_threshold_max),
-    turn_blend,
-  ).unsqueeze(1)
-  in_range = (current_air_time > threshold_min) & (current_air_time < threshold_max)
-  reward = torch.sum(in_range.float(), dim=1)
+  in_air = current_air_time > 0.0
+  reward = torch.sum(in_air.float(), dim=1)
   linear_norm = torch.norm(command[:, :2], dim=1)
   angular_norm = torch.abs(command[:, 2])
   active = (linear_norm + angular_norm > command_threshold).float()
-
-  in_air = current_air_time > 0.0
   num_in_air = torch.clamp(torch.sum(in_air.float()), min=1.0)
   env.extras["log"]["Metrics/air_time_mean"] = (
     torch.sum(current_air_time * in_air.float()) / num_in_air
   )
-  env.extras["log"]["Metrics/air_time_max_target_mean"] = threshold_max.mean()
   return reward * active
 
 
@@ -711,3 +697,17 @@ def knee_distance_lateral(
   too_close = torch.clamp(lateral - 2.0 * min_distance, max=0.0)
   too_far = torch.clamp(-lateral + 2.0 * max_distance, max=0.0)
   return too_close + too_far
+
+
+def joint_energy(
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+  """Penalize mechanical power |qvel| * |tau| on the selected joints.
+
+  Matches RoboParty AMP ``joint_energy``. Torque uses mjlab ``actuator_force``.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  qvel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+  qfrc = asset.data.actuator_force[:, asset_cfg.actuator_ids]
+  return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
