@@ -194,7 +194,7 @@ CASBOT02_LEG_HEAVY_ACTUATOR = BuiltinPositionActuatorCfg(
   ),
   stiffness=_stiffness(0.07),
   damping=_damping(0.07),
-  effort_limit=150.0,
+  effort_limit=120.0,
   armature=0.07,
   frictionloss=0.01,
 )
@@ -209,8 +209,8 @@ CASBOT02_LEG_LIGHT_ACTUATOR = BuiltinPositionActuatorCfg(
     "leg_r6_joint",
   ),
   stiffness=_stiffness(0.029),#原值0.039
-  damping=_damping(0.029),
-  effort_limit=120.0,
+  damping=5,
+  effort_limit=80.0,
   armature=0.029,
   frictionloss=0.01,
 )

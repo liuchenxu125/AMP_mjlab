@@ -711,3 +711,22 @@ def joint_energy(
   qvel = asset.data.joint_vel[:, asset_cfg.joint_ids]
   qfrc = asset.data.actuator_force[:, asset_cfg.actuator_ids]
   return torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
+
+
+def applied_torque_limits_by_ratio(
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+  limit_ratio: float = 0.8,
+) -> torch.Tensor:
+  """Penalize |tau| above ``limit_ratio * effort_limit``.
+
+  Matches InstinctLab parkour ``applied_torque_limits_by_ratio``. Torque uses
+  mjlab ``actuator_force``; the limit is MuJoCo ``actuator_forcerange`` max.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+  actuator_ids = asset_cfg.actuator_ids
+  applied = torch.abs(asset.data.actuator_force[:, actuator_ids])
+  global_ctrl_ids = asset.indexing.ctrl_ids[actuator_ids]
+  effort_limit = env.sim.model.actuator_forcerange[:, global_ctrl_ids, 1]
+  over = (applied - effort_limit * limit_ratio).clamp(min=0.0)
+  return torch.sum(torch.square(over), dim=-1)

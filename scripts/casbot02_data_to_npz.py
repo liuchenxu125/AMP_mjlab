@@ -97,6 +97,7 @@ class Casbot02Motion:
     device: torch.device | str,
     skip_first_line: bool,
     trim_start_frames: int = 0,
+    keep_seconds: float | None = None,
     root_lateral_sign: float = 1.0,
     root_yaw_sign: float = -1.0,
     straighten_root: bool = False,
@@ -119,6 +120,18 @@ class Casbot02Motion:
     if trim_start_frames > 0:
       raw = raw[trim_start_frames:]
       print(f"  [trim] removed {trim_start_frames} source frame(s)")
+    if keep_seconds is not None:
+      if keep_seconds <= 0.0:
+        raise ValueError("keep_seconds must be positive")
+      keep_n = int(round(keep_seconds * input_fps))
+      if keep_n < 1:
+        raise ValueError(
+          f"{self.input_file}: keep_seconds={keep_seconds} is shorter "
+          f"than one source frame at {input_fps} Hz"
+        )
+      if keep_n < raw.shape[0]:
+        raw = raw[:keep_n]
+        print(f"  [keep] first {keep_n} source frame(s) ({keep_seconds:.3f}s)")
     if root_lateral_sign not in (-1.0, 1.0):
       raise ValueError("root_lateral_sign must be either -1 or 1")
     if root_yaw_sign not in (-1.0, 1.0):
@@ -253,6 +266,8 @@ def run_sim(
   output_dir: str | Path,
   skip_first_line: bool,
   trim_start_frames: int,
+  keep_seconds: float | None,
+  hold_to_seconds: float | None,
   root_lateral_sign: float,
   root_yaw_sign: float,
   straighten_root: bool,
@@ -264,6 +279,7 @@ def run_sim(
     device=sim.device,
     skip_first_line=skip_first_line,
     trim_start_frames=trim_start_frames,
+    keep_seconds=keep_seconds,
     root_lateral_sign=root_lateral_sign,
     root_yaw_sign=root_yaw_sign,
     straighten_root=straighten_root,
@@ -348,6 +364,27 @@ def run_sim(
   ):
     log[k] = np.stack(log[k], axis=0)
 
+  if hold_to_seconds is not None:
+    if hold_to_seconds <= 0.0:
+      raise ValueError("hold_to_seconds must be positive")
+    n_hold = int(round(hold_to_seconds * output_fps))
+    if n_hold < 1:
+      raise ValueError(
+        f"hold_to_seconds={hold_to_seconds} is shorter than one output frame "
+        f"at {output_fps} Hz"
+      )
+    pose_keys = ("joint_pos", "body_pos_w", "body_quat_w")
+    vel_keys = ("joint_vel", "body_lin_vel_w", "body_ang_vel_w")
+    for k in pose_keys:
+      log[k] = np.repeat(log[k][:1], n_hold, axis=0)
+    for k in vel_keys:
+      log[k] = np.zeros((n_hold, *log[k].shape[1:]), dtype=log[k].dtype)
+    frame_count = n_hold
+    print(
+      f"  [hold] first frame repeated to {n_hold} frames "
+      f"({hold_to_seconds:.3f}s), velocities zeroed"
+    )
+
   output_dir_path = Path(output_dir)
   output_dir_path.mkdir(parents=True, exist_ok=True)
   out_path = output_dir_path / output_name
@@ -365,6 +402,8 @@ def main(
   device: str = "cuda:0",
   skip_first_line: bool = True,
   trim_start_frames: int = 0,
+  keep_seconds: float | None = None,
+  hold_to_seconds: float | None = None,
   root_lateral_sign: float = 1.0,
   root_yaw_sign: float = -1.0,
   straighten_root: bool = False,
@@ -406,6 +445,8 @@ def main(
       output_dir=output_dir,
       skip_first_line=skip_first_line,
       trim_start_frames=trim_start_frames,
+      keep_seconds=keep_seconds,
+      hold_to_seconds=hold_to_seconds,
       root_lateral_sign=root_lateral_sign,
       root_yaw_sign=root_yaw_sign,
       straighten_root=straighten_root,

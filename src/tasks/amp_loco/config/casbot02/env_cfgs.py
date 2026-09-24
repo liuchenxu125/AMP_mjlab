@@ -17,7 +17,6 @@ from src.assets.robots import (
   CASBOT02_23DOF_ACTION_SCALE,
   CASBOT02_23DOF_AMP_BODY_NAMES,
   CASBOT02_FOOT_GEOM_NAMES,
-  CASBOT02_FOOT_SITE_NAMES,
   CASBOT02_LEG_ONLY_JOINT_NAMES,
   get_casbot02_23dof_robot_cfg,
 )
@@ -38,7 +37,6 @@ def _leg_asset() -> SceneEntityCfg:
 
 
 def _ankle_pitch_torque_asset() -> SceneEntityCfg:
-  """Only ankle pitch: the joints that actually saturate in sim2sim."""
   ankle_pitch = ("leg_l5_joint", "leg_r5_joint")
   return SceneEntityCfg(
     "robot",
@@ -48,160 +46,207 @@ def _ankle_pitch_torque_asset() -> SceneEntityCfg:
   )
 
 
-def _torso_asset() -> SceneEntityCfg:
-  return SceneEntityCfg("robot", body_names=("torso",))
-
-
-def _feet_body_asset() -> SceneEntityCfg:
-  return SceneEntityCfg(
-    "robot", body_names=("leg_l6_link", "leg_r6_link"), preserve_order=True
-  )
-
-
-def _feet_site_asset() -> SceneEntityCfg:
-  return SceneEntityCfg(
-    "robot", site_names=CASBOT02_FOOT_SITE_NAMES, preserve_order=True
-  )
-
-
-def _knee_body_asset() -> SceneEntityCfg:
+def _joint_acc_asset() -> SceneEntityCfg:
   return SceneEntityCfg(
     "robot",
-    body_names=("leg_l4_link", "leg_l3_link", "leg_r4_link", "leg_r3_link"),
+    joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES,
     preserve_order=True,
   )
 
 
-def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
-  """Replace AMP task rewards with the HANDOFF Casbot02 loco-teacher stack.
+def _force_site_asset() -> SceneEntityCfg:
+  return SceneEntityCfg(
+    "robot", site_names=("left_force", "right_force"), preserve_order=True
+  )
 
-  Velocity tracking uses mjlab body-frame root velocity (same formula as
-  loco). Swing-height and pose terms are omitted so AMP style is not fought
-  by an explicit gait/posture prior. Remaining foot terms still use the
-  loco sole sites ``left_foot`` / ``right_foot``.
-  """
+
+def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
+  """Match Leg-AMP rewards from ``2026-09-03_14-47-13`` ``env.yaml``."""
   rewards = cfg.rewards
   for name in (
-    "body_ang_vel_xy_l2",
-    "is_terminated",
-    "joint_acc_l2",
-    "joint_pos_limits",
-    "standing_feet_slip",
-    "standing_foot_distance",
+    "track_linear_velocity",
+    "track_angular_velocity",
+    "upright",
+    "body_ang_vel",
+    "angular_momentum",
+    "dof_pos_limits",
+    "joint_torques_l2",
+    "dof_torques_l2",
+    "torque_limits",
+    "joint_energy",
+    "air_time",
     "feet_air_time",
+    "stand_pose",
+    "feet_distance_lateral",
+    "knee_distance_lateral",
+    "flat_foot",
     "flat_orientation_l2",
     "undesired_contacts",
     "foot_clearance",
-    "track_anchor_linear_velocity",
-    "track_anchor_angular_velocity",
     "pose",
     "swing_height_curve",
     "foot_swing_height",
   ):
     rewards.pop(name, None)
 
-  rewards["track_linear_velocity"] = RewardTermCfg(
-    func=velocity_mdp.track_linear_velocity,
+  rewards["track_anchor_linear_velocity"] = RewardTermCfg(
+    func=amp_mdp.track_anchor_linear_velocity,
     weight=2.0,
-    params={"command_name": "twist", "std": 0.5, "asset_cfg": _torso_asset()},
+    params={
+      "command_name": "twist",
+      "std": 0.5,
+      "mask_delay": True,
+      "delay_env_rew_ratio": 0.0,
+      "anchor_cfg": SceneEntityCfg("robot", body_names=("torso",)),
+    },
   )
-  rewards["track_angular_velocity"] = RewardTermCfg(
-    func=velocity_mdp.track_angular_velocity,
+  rewards["track_anchor_angular_velocity"] = RewardTermCfg(
+    func=amp_mdp.track_anchor_angular_velocity,
     weight=2.0,
-    params={"command_name": "twist", "std": 0.7071, "asset_cfg": _torso_asset()},
+    params={
+      "command_name": "twist",
+      "std": 0.5,
+      "mask_delay": True,
+      "delay_env_rew_ratio": 0.0,
+      "anchor_cfg": SceneEntityCfg("robot", body_names=("torso",)),
+    },
+  )
+  # rewards["track_root_height"] = RewardTermCfg(
+  #   func=amp_mdp.track_root_height,
+  #   weight=1.0,
+  #   params={"std": 0.3, "mask_delay": True, "delay_env_rew_ratio": 3.5},
+  # )
+  rewards["body_ang_vel_xy_l2"] = RewardTermCfg(
+    func=amp_mdp.body_ang_vel_xy_l2,
+    weight=0.5,
+    params={
+      "std": 3.14,
+      "mask_delay": True,
+      "delay_env_rew_ratio": 0.0,
+      "body_cfg": SceneEntityCfg("robot", body_names=("torso",)),
+    },
   )
   rewards["upright"] = RewardTermCfg(
     func=velocity_mdp.flat_orientation,
     weight=1.0,
-    params={"std": math.sqrt(0.2), "asset_cfg": _torso_asset()},
+    params={
+      "std": math.sqrt(0.2),
+      "asset_cfg": SceneEntityCfg("robot", body_names=("torso",)),
+    },
   )
-  rewards["body_ang_vel"] = RewardTermCfg(
-    func=velocity_mdp.body_angular_velocity_penalty,
-    weight=-0.05,
-    params={"asset_cfg": _torso_asset()},
+  rewards["is_terminated"] = RewardTermCfg(
+    func=envs_mdp.is_terminated, weight=-200.0
   )
-  rewards["angular_momentum"] = RewardTermCfg(
-    func=velocity_mdp.angular_momentum_penalty,
-    weight=-0.02,
-    params={"sensor_name": "robot/root_angmom"},
+  rewards["joint_acc_l2"] = RewardTermCfg(
+    func=envs_mdp.joint_acc_l2,
+    weight=-2.5e-7,
+    params={"asset_cfg": _joint_acc_asset()},
   )
-  rewards["dof_pos_limits"] = RewardTermCfg(
+  rewards["joint_pos_limits"] = RewardTermCfg(
     func=envs_mdp.joint_pos_limits,
-    weight=-1.0,
+    weight=-10.0,
     params={"asset_cfg": _leg_asset()},
   )
-  rewards["joint_torques_l2"] = RewardTermCfg(
-    func=envs_mdp.joint_torques_l2,
-    weight=-1.0e-5,
-    params={"asset_cfg": _ankle_pitch_torque_asset()},
+  rewards["action_rate_l2"] = RewardTermCfg(
+    func=envs_mdp.action_rate_l2, weight=-0.02
   )
-  rewards["joint_energy"] = RewardTermCfg(
-    func=amp_mdp.joint_energy,
-    weight=-1.0e-4,
-    params={"asset_cfg": _ankle_pitch_torque_asset()},
+  # Bilateral ankle-pitch smoothness (left+right). Extra to the global
+  # joint_acc_l2 / action_rate_l2 so swing-foot whip is damped without a
+  # one-sided right-ankle penalty that would fight mirror loss.
+  # rewards["ankle_joint_acc_l2"] = RewardTermCfg(
+  #   func=envs_mdp.joint_acc_l2,
+  #   weight=-1e-6,
+  #   params={"asset_cfg": _ankle_pitch_torque_asset()},
+  # )
+  # rewards["ankle_joint_vel_l2"] = RewardTermCfg(
+  #   func=envs_mdp.joint_vel_l2,
+  #   weight=-1e-3,
+  #   params={"asset_cfg": _ankle_pitch_torque_asset()},
+  # )
+  # rewards["dof_torques_l2"] = RewardTermCfg(
+  #   func=envs_mdp.joint_torques_l2,
+  #   weight=-3e-6,
+  #   params={"asset_cfg": _ankle_pitch_torque_asset()},
+  # )
+  rewards["torque_limits"] = RewardTermCfg(
+    func=amp_mdp.applied_torque_limits_by_ratio,
+    weight=-0.01,
+    params={
+      "asset_cfg": _ankle_pitch_torque_asset(),
+      "limit_ratio": 0.8,
+    },
   )
-  rewards["action_rate_l2"].weight = -0.1
-
+  rewards["foot_slip"] = RewardTermCfg(
+    func=amp_mdp.feet_slip,
+    weight=-0.4,
+    params={
+      "sensor_name": "feet_ground_contact",
+      "command_name": "twist",
+      "command_threshold": 0.2,
+      "asset_cfg": _force_site_asset(),
+    },
+  )
+  rewards["soft_landing"] = RewardTermCfg(
+    func=amp_mdp.soft_landing,
+    weight=-0.003,
+    params={
+      "sensor_name": "feet_ground_contact",
+      "command_name": "twist",
+      "command_threshold": 0.1,
+    },
+  )
+  rewards["self_collisions"] = RewardTermCfg(
+    func=velocity_mdp.self_collision_cost,
+    weight=-0.1,
+    params={"sensor_name": "self_collision", "force_threshold": 10.0},
+  )
   rewards["air_time"] = RewardTermCfg(
     func=amp_mdp.command_conditioned_feet_air_time,
-    weight=1.5,
+    weight=0.5,
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
       "command_threshold": 0.2,
     },
   )
-  rewards["foot_slip"].func = velocity_mdp.feet_slip
-  rewards["foot_slip"].weight = -1.0
-  rewards["foot_slip"].params["asset_cfg"] = _feet_site_asset()
-  rewards["foot_slip"].params["command_threshold"] = 0.05
-  rewards["soft_landing"].func = velocity_mdp.soft_landing
-  rewards["soft_landing"].weight = -3e-3
-  rewards["soft_landing"].params["command_threshold"] = 0.05
-
+  rewards["standing_feet_slip"] = RewardTermCfg(
+    func=amp_mdp.standing_feet_slip,
+    weight=-2.0,
+    params={
+      "sensor_name": "feet_ground_contact",
+      "command_name": "twist",
+      "command_threshold": 0.2,
+      "asset_cfg": _force_site_asset(),
+    },
+  )
   rewards["stand_pose"] = RewardTermCfg(
     func=amp_mdp.stand_pose,
     weight=-5.0,
-    params={"command_name": "twist", "asset_cfg": _leg_asset()},
+    params={
+      "command_name": "twist",
+      "asset_cfg": _leg_asset(),
+    },
   )
-  # rewards["feet_distance_lateral"] = RewardTermCfg(
-  #   func=amp_mdp.feet_distance_lateral,
-  #   weight=2.5,
+  # Target 0.285 m is wider than HOME stance (~0.20 m) and pulled the
+  # standing pose off the default. Keep feet-slip; pose is stand_pose.
+  # rewards["standing_foot_distance"] = RewardTermCfg(
+  #   func=amp_mdp.standing_foot_distance,
+  #   weight=-10.0,
   #   params={
-  #     "asset_cfg": _feet_site_asset(),
-  #     "min_distance": 0.266,
-  #     "max_distance": 0.40,
+  #     "command_name": "twist",
+  #     "command_threshold": 0.2,
+  #     "target_lateral_distance": 0.285,
+  #     "target_fore_distance": 0.0,
+  #     "asset_cfg": _force_site_asset(),
   #   },
   # )
-  # rewards["knee_distance_lateral"] = RewardTermCfg(
-  #   func=amp_mdp.knee_distance_lateral,
-  #   weight=2.5,
-  #   params={
-  #     "asset_cfg": _knee_body_asset(),
-  #     "min_distance": 0.279,
-  #     "max_distance": 0.32,
-  #   },
-  # )
-  # rewards["flat_foot"] = RewardTermCfg(
-  #   func=amp_mdp.flat_foot,
-  #   weight=-0.5,
-  #   params={
-  #     "sensor_name": "feet_ground_contact",
-  #     "asset_cfg": _feet_body_asset(),
-  #   },
-  # )
-  rewards["self_collisions"] = RewardTermCfg(
-    func=velocity_mdp.self_collision_cost,
-    weight=-1.0,
-    params={"sensor_name": "self_collision", "force_threshold": 10.0},
-  )
 
 
 def _apply_casbot02_twist(cfg: ManagerBasedRlEnvCfg) -> None:
   """G1 AMP ranges with an extra straight-walk cohort.
 
   Mix: 5% stand, 25% heading (sampled ``vx``, yaw from heading error),
-  20% pure forward (``vx>0``, ``vy=wz=0``). The remaining 50% keep G1
+  10% pure forward (``vx>0``, ``vy=wz=0``). The remaining 60% keep G1
   uniform ``vx`` and ``wz``.
   """
   base = cfg.commands["twist"]
@@ -218,7 +263,7 @@ def _apply_casbot02_twist(cfg: ManagerBasedRlEnvCfg) -> None:
     rel_stand_then_go_envs=0.0,
     rel_heading_envs=0.25,
     rel_world_envs=0.0,
-    rel_forward_envs=0.2,
+    rel_forward_envs=0.1,
     init_velocity_prob=base.init_velocity_prob,
     ranges=amp_mdp.Casbot02VelocityCommandCfg.Ranges(
       lin_vel_x=base.ranges.lin_vel_x,
@@ -231,20 +276,6 @@ def _apply_casbot02_twist(cfg: ManagerBasedRlEnvCfg) -> None:
   twist_cmd.viz.z_offset = 1.15
   cfg.commands["twist"] = twist_cmd
   cfg.curriculum.pop("command_vel", None)
-
-
-def _apply_casbot02_push(cfg: ManagerBasedRlEnvCfg) -> None:
-  """Match loco / mjlab default interval push (planar + vertical + tilt)."""
-  push_robot = cfg.events["push_robot"]
-  push_robot.interval_range_s = (1.0, 3.0)
-  push_robot.params["velocity_range"] = {
-    "x": (-0.5, 0.5),
-    "y": (-0.5, 0.5),
-    "z": (-0.4, 0.4),
-    "roll": (-0.52, 0.52),
-    "pitch": (-0.52, 0.52),
-    "yaw": (-0.78, 0.78),
-  }
 
 
 def _apply_casbot02_reset(cfg: ManagerBasedRlEnvCfg) -> None:
@@ -496,7 +527,6 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
 
   _apply_casbot02_loco_rewards(cfg)
   _apply_casbot02_twist(cfg)
-  _apply_casbot02_push(cfg)
   _apply_casbot02_reset(cfg)
 
   cfg.observations["critic"].terms["body_pos_b"].params[
