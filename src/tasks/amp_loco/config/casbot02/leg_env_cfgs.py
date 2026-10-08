@@ -8,6 +8,7 @@ full-body AMP task.
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
+from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 
 from src.assets.robots import (
@@ -46,6 +47,15 @@ def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg
     actuator_names=CASBOT02_LEG_ONLY_JOINT_NAMES,
     scale=CASBOT02_LEG_ONLY_ACTION_SCALE,
     use_default_offset=True,
+  )
+
+  cfg.rewards["ankle_pitch_action_rate_l2"] = RewardTermCfg(
+    func=amp_mdp.joint_action_rate_l2,
+    weight=-0.01,
+    params={
+      "action_name": "joint_pos",
+      "joint_names": ("leg_l5_joint", "leg_r5_joint"),
+    },
   )
 
   # ---- Actor observations: deployment-visible state only (12 leg joints) ----

@@ -24,6 +24,43 @@ if TYPE_CHECKING:
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
 
 
+class joint_action_rate_l2:
+  """Penalize raw action changes for selected joints in one action term."""
+
+  def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
+    action_name = cfg.params["action_name"]
+    joint_names = cfg.params["joint_names"]
+    term = env.action_manager.get_term(action_name)
+    target_names = term.target_names
+    missing = [name for name in joint_names if name not in target_names]
+    if missing:
+      raise ValueError(f"Action term '{action_name}' does not control joints: {missing}")
+
+    # Action-manager columns include all preceding action terms.
+    offset = 0
+    for name in env.action_manager.active_terms:
+      if name == action_name:
+        break
+      offset += env.action_manager.get_term(name).action_dim
+    self._action_ids = torch.tensor(
+      [offset + target_names.index(name) for name in joint_names],
+      device=env.device,
+      dtype=torch.long,
+    )
+
+  def __call__(
+    self,
+    env: ManagerBasedRlEnv,
+    action_name: str,
+    joint_names: tuple[str, ...],
+  ) -> torch.Tensor:
+    delta = (
+      env.action_manager.action[:, self._action_ids]
+      - env.action_manager.prev_action[:, self._action_ids]
+    )
+    return torch.sum(torch.square(delta), dim=1)
+
+
 def _get_delay_env_mask(env: ManagerBasedRlEnv) -> torch.Tensor | None:
   """Get delaying env mask from DelayedTerminationManager if installed."""
   tm = env.termination_manager
