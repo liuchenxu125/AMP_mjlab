@@ -7,6 +7,7 @@ full-body AMP task.
 """
 
 from mjlab.envs import ManagerBasedRlEnvCfg
+from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
@@ -49,14 +50,31 @@ def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg
     use_default_offset=True,
   )
 
-  cfg.rewards["ankle_pitch_action_rate_l2"] = RewardTermCfg(
-    func=amp_mdp.joint_action_rate_l2,
-    weight=-0.01,
-    params={
-      "action_name": "joint_pos",
-      "joint_names": ("leg_l5_joint", "leg_r5_joint"),
-    },
-  )
+  # Both ankle penalties cover pitch and roll; keep existing metric names.
+  # cfg.rewards["ankle_pitch_action_rate_l2"] = RewardTermCfg(
+  #   func=amp_mdp.joint_action_rate_l2,
+  #   weight=-0.01,
+  #   params={
+  #     "action_name": "joint_pos",
+  #     "joint_names": (
+  #       "leg_l5_joint", "leg_l6_joint", "leg_r5_joint", "leg_r6_joint"
+  #     ),
+  #   },
+  # )
+
+  # cfg.rewards["ankle_pitch_joint_acc_l2"] = RewardTermCfg(
+  #   func=envs_mdp.joint_acc_l2,
+  #   weight=-2.5e-7,
+  #   params={
+  #     "asset_cfg": SceneEntityCfg(
+  #       "robot",
+  #       joint_names=(
+  #         "leg_l5_joint", "leg_l6_joint", "leg_r5_joint", "leg_r6_joint"
+  #       ),
+  #       preserve_order=True,
+  #     ),
+  #   },
+  # )
 
   # ---- Actor observations: deployment-visible state only (12 leg joints) ----
   cfg.observations["actor"].terms["joint_pos"].params["asset_cfg"] = LEG_ONLY_ASSET

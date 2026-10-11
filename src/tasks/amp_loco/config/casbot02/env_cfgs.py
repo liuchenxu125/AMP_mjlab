@@ -172,13 +172,18 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
     func=amp_mdp.applied_torque_limits_by_ratio,
     weight=-0.01,
     params={
-      "asset_cfg": _ankle_pitch_torque_asset(),
+      "asset_cfg": SceneEntityCfg(
+        "robot",
+        joint_names=CASBOT02_LEG_ONLY_JOINT_NAMES,
+        actuator_names=list(CASBOT02_LEG_ONLY_JOINT_NAMES),
+        preserve_order=True,
+      ),
       "limit_ratio": 0.8,
     },
   )
   rewards["foot_slip"] = RewardTermCfg(
     func=amp_mdp.feet_slip,
-    weight=-0.4,
+    weight=-0.8,
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -202,7 +207,7 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
   )
   rewards["air_time"] = RewardTermCfg(
     func=amp_mdp.command_conditioned_feet_air_time,
-    weight=0.5,
+    weight=0.75,
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -418,7 +423,7 @@ def casbot02_amp_rough_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
         preserve_order=True,
       ),
       "operation": "abs",
-      "ranges": (0.3, 1.3),
+      "ranges": (0.2, 1.3),
       "shared_random": True,
     },
   )
