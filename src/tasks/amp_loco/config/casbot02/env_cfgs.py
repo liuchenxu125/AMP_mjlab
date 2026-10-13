@@ -29,6 +29,12 @@ from src.tasks.velocity.mdp import UniformVelocityCommandCfg
 # 把 sim 的 waist_yaw_link 质心固定后移 3cm,让策略在训练时就学会往前压应对。
 WAIST_COM_BACKWARD_OFFSET = 0.02
 
+# Minimum *signed* ankle-origin separation in the root frame, not sole-edge
+# clearance or a fixed stance target. CASBOT02 HOME is 0.285 m; E1 HOME is
+# 0.228 m with a configured 0.16 m lower bound. Keeping that relative margin:
+# 0.16 * (0.285 / 0.228) = 0.20 m. CASBOT02 foot collision width is ~0.123 m.
+CASBOT02_MIN_FEET_LATERAL_DISTANCE = 0.25
+
 
 def _leg_asset() -> SceneEntityCfg:
   return SceneEntityCfg(
@@ -148,7 +154,7 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
     params={"asset_cfg": _leg_asset()},
   )
   rewards["action_rate_l2"] = RewardTermCfg(
-    func=envs_mdp.action_rate_l2, weight=-0.02
+    func=envs_mdp.action_rate_l2, weight=-0.01
   )
   # Bilateral ankle-pitch smoothness (left+right). Extra to the global
   # joint_acc_l2 / action_rate_l2 so swing-foot whip is damped without a
@@ -183,7 +189,7 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
   )
   rewards["foot_slip"] = RewardTermCfg(
     func=amp_mdp.feet_slip,
-    weight=-0.8,
+    weight=-0.25,
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -205,9 +211,21 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
     weight=-0.1,
     params={"sensor_name": "self_collision", "force_threshold": 10.0},
   )
+  rewards["feet_crossing"] = RewardTermCfg(
+    func=amp_mdp.feet_crossing,
+    weight=-4.0,
+    params={
+      "minimum_distance": CASBOT02_MIN_FEET_LATERAL_DISTANCE,
+      "asset_cfg": SceneEntityCfg(
+        "robot",
+        body_names=("leg_l6_link", "leg_r6_link"),
+        preserve_order=True,
+      ),
+    },
+  )
   rewards["air_time"] = RewardTermCfg(
     func=amp_mdp.command_conditioned_feet_air_time,
-    weight=0.75,
+    weight=0.5,
     params={
       "sensor_name": "feet_ground_contact",
       "command_name": "twist",
@@ -232,8 +250,8 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
       "asset_cfg": _leg_asset(),
     },
   )
-  # Target 0.285 m is wider than HOME stance (~0.20 m) and pulled the
-  # standing pose off the default. Keep feet-slip; pose is stand_pose.
+  # HOME ankle-origin spacing is 0.285 m (verified by FK). Keep this fixed
+  # stance-target reward disabled; feet_crossing only imposes a lower bound.
   # rewards["standing_foot_distance"] = RewardTermCfg(
   #   func=amp_mdp.standing_foot_distance,
   #   weight=-10.0,

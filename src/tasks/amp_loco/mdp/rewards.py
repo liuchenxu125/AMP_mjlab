@@ -686,6 +686,44 @@ def flat_foot(
   return torch.sum(tilt_error * contact, dim=-1)
 
 
+def feet_crossing(
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg,
+  minimum_distance: float,
+) -> torch.Tensor:
+  """Positive cost for feet too close or crossed; use a negative reward weight.
+
+  Select exactly two bodies or sites in LEFT, RIGHT order. The signed root-frame
+  Y difference preserves crossing information, unlike an absolute distance.
+  This applies to both stance and swing, for every command, like E1's reward.
+  It does not constrain fore-aft stride length or impose a maximum stance width.
+  """
+  if minimum_distance <= 0.0:
+    raise ValueError("feet_crossing minimum_distance must be positive")
+  asset = _get_robot(env, asset_cfg)
+  if asset_cfg.site_names is not None:
+    foot_pos_w = asset.data.site_pos_w[:, asset_cfg.site_ids, :]
+  else:
+    foot_pos_w = asset.data.body_link_pos_w[:, asset_cfg.body_ids, :]
+  if foot_pos_w.shape[1] != 2:
+    raise ValueError(
+      "feet_crossing requires exactly two feet in left, right order, "
+      f"got {foot_pos_w.shape[1]}"
+    )
+  delta_w = foot_pos_w[:, 0] - foot_pos_w[:, 1]
+  delta_b = quat_apply_inverse(asset.data.root_link_quat_w, delta_w)
+  signed_distance = delta_b[:, 1]
+  cost = torch.relu(minimum_distance - signed_distance)
+  env.extras["log"]["Metrics/feet_signed_lateral_distance"] = signed_distance.mean()
+  env.extras["log"]["Metrics/feet_too_close_fraction"] = (
+    signed_distance < minimum_distance
+  ).float().mean()
+  env.extras["log"]["Metrics/feet_crossed_fraction"] = (
+    signed_distance < 0.0
+  ).float().mean()
+  return cost
+
+
 def feet_distance_lateral(
   env: ManagerBasedRlEnv,
   asset_cfg: SceneEntityCfg,
