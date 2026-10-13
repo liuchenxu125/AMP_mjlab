@@ -1,15 +1,15 @@
 """CASBOT02 AMP locomotion with lower-body actor observations.
 
-Actor and critic observations expose only the 12 leg joints and omit phase.
-The policy controls all CASBOT02 joints except ``waist_yaw_joint``. AMP
-discriminator observations keep the same full-body 13 key bodies as the
-full-body AMP task.
+Actor and critic expose 12 leg joints plus four left/right gait-clock features.
+The policy controls 12 leg joints; arms follow the existing knee-mapped swing.
+AMP discriminator observations retain the seven configured key bodies.
 """
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.reward_manager import RewardTermCfg
+from mjlab.managers.observation_manager import ObservationTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 
 from src.assets.robots import (
@@ -18,6 +18,12 @@ from src.assets.robots import (
   CASBOT02_LEG_ONLY_JOINT_NAMES,
 )
 import src.tasks.amp_loco.mdp as amp_mdp
+from src.tasks.amp_loco.gait import (
+  GAIT_OFFSET,
+  GAIT_PERIOD,
+  GAIT_STANCE_RATIO,
+  GAIT_STANDING_THRESHOLD,
+)
 from src.tasks.amp_loco.config.casbot02.env_cfgs import (
   casbot02_amp_flat_env_cfg as _base_flat_env_cfg,
 )
@@ -26,9 +32,33 @@ from src.tasks.amp_loco.config.casbot02.env_cfgs import (
 )
 
 
-def _remove_phase_observation(cfg: ManagerBasedRlEnvCfg) -> None:
-  cfg.observations["actor"].terms.pop("phase", None)
-  cfg.observations["critic"].terms.pop("phase", None)
+def _add_leg_gait(cfg: ManagerBasedRlEnvCfg) -> None:
+  phase_params = {
+    "command_name": "twist",
+    "gait_period": GAIT_PERIOD,
+    "gait_offset": GAIT_OFFSET,
+    "standing_threshold": GAIT_STANDING_THRESHOLD,
+  }
+  for group_name in ("actor", "critic"):
+    group = cfg.observations[group_name]
+    terms = {name: term for name, term in group.terms.items() if name != "phase"}
+    group.terms = {}
+    for name, term in terms.items():
+      group.terms[name] = term
+      if name == "actions":
+        group.terms["phase"] = ObservationTermCfg(
+          func=amp_mdp.loco_phase_features, params=dict(phase_params)
+        )
+  cfg.rewards["gait_phase_contact"] = RewardTermCfg(
+    func=amp_mdp.gait_phase_contact,
+    weight=0.5,
+    params={
+      **phase_params,
+      "sensor_name": "feet_ground_contact",
+      "stance_ratio": GAIT_STANCE_RATIO,
+      "contact_force_threshold": 1.0,
+    },
+  )
 
 
 def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg:
@@ -40,7 +70,7 @@ def _apply_leg_only_overrides(cfg: ManagerBasedRlEnvCfg) -> ManagerBasedRlEnvCfg
     "robot", body_names=CASBOT02_LEG_AMP_BODY_NAMES, preserve_order=True
   )
 
-  _remove_phase_observation(cfg)
+  _add_leg_gait(cfg)
 
   # 12 腿 action + 手臂摆臂（手臂由摆臂公式控制，不经网络）。
   cfg.actions["joint_pos"] = amp_mdp.LegWithArmSwingActionCfg(

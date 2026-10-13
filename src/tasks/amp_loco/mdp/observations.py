@@ -7,6 +7,12 @@ import torch
 from mjlab.entity import Entity
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactSensor
+from src.tasks.amp_loco.gait import (
+  GAIT_OFFSET,
+  GAIT_PERIOD,
+  GAIT_STANDING_THRESHOLD,
+  validate_gait_parameters,
+)
 
 from mjlab.utils.lab_api.math import (
   matrix_from_quat,
@@ -18,6 +24,42 @@ if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
 
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
+
+
+def loco_leg_phase(
+  env: ManagerBasedRlEnv,
+  command_name: str = "twist",
+  gait_period: float = GAIT_PERIOD,
+  gait_offset: float = GAIT_OFFSET,
+  standing_threshold: float = GAIT_STANDING_THRESHOLD,
+) -> torch.Tensor:
+  """Episode-clock phases, with both feet in stance for near-zero commands."""
+  validate_gait_parameters(gait_period, gait_offset, standing_threshold)
+  elapsed = env.episode_length_buf.to(torch.float32) * env.step_dt
+  left = torch.remainder(elapsed, gait_period) / gait_period
+  right = torch.remainder(left + gait_offset, 1.0)
+  phases = torch.stack((left, right), dim=-1)
+  command = env.command_manager.get_command(command_name)
+  # Use the actual command so deployment does not need a hidden standing flag.
+  standing = torch.linalg.vector_norm(command, dim=-1) < standing_threshold
+  return torch.where(standing.unsqueeze(-1), torch.zeros_like(phases), phases)
+
+
+def loco_phase_features(
+  env: ManagerBasedRlEnv,
+  command_name: str = "twist",
+  gait_period: float = GAIT_PERIOD,
+  gait_offset: float = GAIT_OFFSET,
+  standing_threshold: float = GAIT_STANDING_THRESHOLD,
+) -> torch.Tensor:
+  phases = loco_leg_phase(
+    env, command_name, gait_period, gait_offset, standing_threshold
+  )
+  angles = 2.0 * torch.pi * phases
+  return torch.stack(
+    (angles[:, 0].sin(), angles[:, 0].cos(), angles[:, 1].sin(), angles[:, 1].cos()),
+    dim=-1,
+  )
 
 
 def phase(

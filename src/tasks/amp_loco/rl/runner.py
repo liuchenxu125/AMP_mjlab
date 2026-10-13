@@ -10,6 +10,13 @@ from mjlab.rl.exporter_utils import (
   get_base_metadata,
 )
 from rsl_rl.runners.amp_on_policy_runner import AmpOnPolicyRunner
+from src.tasks.amp_loco.gait import (
+  GAIT_OBSERVATION_LAYOUT,
+  GAIT_OFFSET,
+  GAIT_PERIOD,
+  GAIT_STANDING_THRESHOLD,
+)
+from src.tasks.amp_loco.mdp.observations import loco_phase_features
 
 
 class _OnnxPolicyWrapper(torch.nn.Module):
@@ -104,6 +111,24 @@ class AMPOnPolicyRunner(AmpOnPolicyRunner):
         **_onnx_export_kwargs_single_file(),
       )
       _inline_external_onnx_data(os.path.join(path, filename))
+      actor_cfg = self.env.unwrapped.cfg.observations["actor"]
+      phase_cfg = actor_cfg.terms.get("phase")
+      if num_obs == 196 and phase_cfg is not None and phase_cfg.func is loco_phase_features:
+        params = phase_cfg.params
+        attach_metadata_to_onnx(
+          os.path.join(path, filename),
+          {
+            "casbot02_observation_layout": GAIT_OBSERVATION_LAYOUT,
+            "gait_period": params.get("gait_period", GAIT_PERIOD),
+            "gait_offset": params.get("gait_offset", GAIT_OFFSET),
+            "gait_standing_threshold": params.get(
+              "standing_threshold", GAIT_STANDING_THRESHOLD
+            ),
+            "gait_phase_feature_order": "sin_left,cos_left,sin_right,cos_right",
+            "history_length": str(actor_cfg.history_length),
+            "history_ordering": actor_cfg.history_ordering,
+          },
+        )
     finally:
       # Restore training state because save() can export during training.
       policy.to(self.device)

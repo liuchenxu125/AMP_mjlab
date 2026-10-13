@@ -22,8 +22,8 @@ HISTORY_LENGTH = 4
 NUM_LEG_ACTIONS = 12
 NUM_FULL_ACTIONS = 22
 
-LEG_ACTOR_OBS_DIM = 180
-LEG_CRITIC_OBS_DIM = 444
+LEG_ACTOR_OBS_DIM = 196
+LEG_CRITIC_OBS_DIM = 460
 FULL_ACTOR_OBS_DIM = 308
 FULL_CRITIC_OBS_DIM = 788
 
@@ -46,6 +46,27 @@ _LEG_BODY_PERM = (0, 4, 5, 6, 1, 2, 3)
 _NUM_LEG_BODIES = 7
 
 _FRAME_TERMS: dict[int, tuple[tuple[str, int], ...]] = {
+  49: (
+    ("base_ang_vel", 3),
+    ("projected_gravity", 3),
+    ("command", 3),
+    ("joint_pos", 12),
+    ("joint_vel", 12),
+    ("actions", 12),
+    ("phase", 4),
+  ),
+  115: (
+    ("base_ang_vel", 3),
+    ("projected_gravity", 3),
+    ("command", 3),
+    ("joint_pos", 12),
+    ("joint_vel", 12),
+    ("actions", 12),
+    ("phase", 4),
+    ("base_lin_vel", 3),
+    ("body_pos_b", 21),
+    ("body_ori_b", 42),
+  ),
   45: (
     ("base_ang_vel", 3),
     ("projected_gravity", 3),
@@ -153,6 +174,8 @@ def _mirror_named_term(name: str, value: torch.Tensor) -> torch.Tensor:
   if name == "command":
     return _scale_last(value, _COMMAND_SIGNS)
   if name == "phase":
+    if value.shape[-1] == 4:
+      return value[..., [2, 3, 0, 1]]
     return value
   if name in ("joint_pos", "joint_vel", "actions"):
     return mirror_actions(value)
@@ -198,7 +221,8 @@ def _terms_for_obs_dim(obs_dim: int) -> tuple[tuple[str, int], ...]:
   if terms is None:
     raise ValueError(
       "CASBOT02 AMP symmetry expected actor/critic dims "
-      f"{LEG_ACTOR_OBS_DIM}/{LEG_CRITIC_OBS_DIM} (leg) or "
+      f"{LEG_ACTOR_OBS_DIM}/{LEG_CRITIC_OBS_DIM} (leg with phase), "
+      "180/444 (legacy leg), or "
       f"{FULL_ACTOR_OBS_DIM}/{FULL_CRITIC_OBS_DIM} (full-body), got {obs_dim}"
     )
   return terms

@@ -21,6 +21,11 @@ from src.assets.robots import (
   get_casbot02_23dof_robot_cfg,
 )
 from src.assets.robots.casbot02.casbot02_constants import HOME_KEYFRAME
+from src.tasks.amp_loco.gait import (
+  GAIT_OBSERVATION_LAYOUT,
+  phase_features_numpy,
+  validate_gait_parameters,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -84,7 +89,8 @@ ACTION_JOINT_INDICES = np.array(
 ARM_JOINT_INDICES = np.array(
   [12, 13, 14, 15, 16, 17, 18, 19, 20, 21], dtype=np.int64
 )
-CURRENT_SINGLE_FRAME_OBS_SIZE = 45  # 3+3+3+12+12+12, no phase
+LEGACY_SINGLE_FRAME_OBS_SIZE = 45
+CURRENT_SINGLE_FRAME_OBS_SIZE = 49  # Legacy leg state followed by four phase features.
 COMMAND_X_RANGE = (-3.5, 5.0)
 COMMAND_Y_RANGE = (-1.0, 1.0)
 COMMAND_YAW_RANGE = (-3.14, 3.14 )
@@ -173,6 +179,7 @@ class OnnxPolicy:
     output_shape = self.session.get_outputs()[0].shape
     self.input_dim = input_shape[1] if isinstance(input_shape[1], int) else None
     self.output_dim = output_shape[1] if isinstance(output_shape[1], int) else None
+    self.metadata = self.session.get_modelmeta().custom_metadata_map
     print(
       f"[ONNX] loaded {model_path}\n"
       f"       providers={self.session.get_providers()}\n"
@@ -215,11 +222,47 @@ def build_model() -> mujoco.MjModel:
   return model
 
 
+def resolve_observation_layout(input_dim: int | None) -> tuple[int, int, bool]:
+  layouts = {
+    HISTORY_LENGTH * LEGACY_SINGLE_FRAME_OBS_SIZE: (LEGACY_SINGLE_FRAME_OBS_SIZE, False),
+    HISTORY_LENGTH * CURRENT_SINGLE_FRAME_OBS_SIZE: (CURRENT_SINGLE_FRAME_OBS_SIZE, True),
+  }
+  if input_dim not in layouts:
+    raise ValueError(
+      f"Unsupported ONNX input dimension {input_dim}; expected 180 (legacy) or 196 (gait phase)"
+    )
+  frame_size, include_phase = layouts[input_dim]
+  return frame_size, HISTORY_LENGTH, include_phase
+
+
+def gait_parameters_from_metadata(metadata: dict[str, str]) -> dict[str, float]:
+  if metadata.get("casbot02_observation_layout") != GAIT_OBSERVATION_LAYOUT:
+    raise ValueError("196-dim ONNX requires CASBOT02 gait metadata; re-export with the current runner")
+  if metadata.get("history_length") != str(HISTORY_LENGTH) or metadata.get("history_ordering") != "time":
+    raise ValueError("CASBOT02 sim2sim requires four time-major observation frames")
+  if metadata.get("gait_phase_feature_order") != "sin_left,cos_left,sin_right,cos_right":
+    raise ValueError("Unsupported ONNX gait phase feature order")
+  try:
+    params = {
+      "gait_period": float(metadata["gait_period"]),
+      "gait_offset": float(metadata["gait_offset"]),
+      "standing_threshold": float(metadata["gait_standing_threshold"]),
+    }
+  except (KeyError, ValueError) as exc:
+    raise ValueError("Missing or invalid ONNX gait parameters") from exc
+  validate_gait_parameters(**params)
+  return params
+
+
 def get_obs_frame(
   data: mujoco.MjData,
   command: np.ndarray,
   last_action: np.ndarray,
   default_joint_pos: np.ndarray,
+  *,
+  include_phase: bool = False,
+  elapsed_s: float = 0.0,
+  gait_params: dict[str, float] | None = None,
 ) -> np.ndarray:
   base_ang_vel = np.asarray(
     data.sensor("angular-velocity").data, dtype=np.float64
@@ -242,11 +285,14 @@ def get_obs_frame(
     joint_vel_rel,
     last_action,
   ]
+  if include_phase:
+    obs_parts.append(phase_features_numpy(elapsed_s, command, **(gait_params or {})))
   obs = np.concatenate(obs_parts, axis=0)
-  if obs.shape != (CURRENT_SINGLE_FRAME_OBS_SIZE,):
+  frame_size = CURRENT_SINGLE_FRAME_OBS_SIZE if include_phase else LEGACY_SINGLE_FRAME_OBS_SIZE
+  if obs.shape != (frame_size,):
     raise RuntimeError(
       "Expected single-frame obs shape "
-      f"({CURRENT_SINGLE_FRAME_OBS_SIZE},), got {obs.shape}"
+      f"({frame_size},), got {obs.shape}"
     )
   return obs.astype(np.float32)
 
@@ -550,15 +596,9 @@ def run(
       f"Expected ONNX output dim {NUM_POLICY_ACTIONS}, got {policy.output_dim}. "
       "This sim2sim script expects the current 12-action policy (legs only, arms via swing)."
     )
-  input_dim = policy.input_dim or HISTORY_LENGTH * CURRENT_SINGLE_FRAME_OBS_SIZE
-  if input_dim % CURRENT_SINGLE_FRAME_OBS_SIZE != 0:
-    raise RuntimeError(
-      "ONNX input dim must be a multiple of the current single-frame obs size. "
-      f"Got input_dim={input_dim}, supported={CURRENT_SINGLE_FRAME_OBS_SIZE}."
-    )
-  single_frame_obs_size = CURRENT_SINGLE_FRAME_OBS_SIZE
-  history_length = input_dim // single_frame_obs_size
-  obs_layout = "leg_no_phase_12j_22a"
+  single_frame_obs_size, history_length, include_phase = resolve_observation_layout(policy.input_dim)
+  gait_params = gait_parameters_from_metadata(policy.metadata) if include_phase else None
+  obs_layout = GAIT_OBSERVATION_LAYOUT if include_phase else "leg_no_phase_12j_12a"
   model = build_model()
   if model.nu != NUM_FULL_JOINTS:
     raise RuntimeError(f"Expected {NUM_FULL_JOINTS} actuators, got {model.nu}")
@@ -596,6 +636,8 @@ def run(
     "[sim2sim] command="
     f"({DEFAULT_COMMAND_X:.3f}, {DEFAULT_COMMAND_Y:.3f}, {DEFAULT_COMMAND_YAW:.3f})"
   )
+  if gait_params is not None:
+    print(f"[sim2sim] gait clock (from ONNX metadata): {gait_params}")
   if init_motion is not None:
     print(f"[sim2sim] initialized from: {init_motion}")
 
@@ -622,6 +664,9 @@ def run(
           command,
           last_action,
           default_obs_joint_pos,
+          include_phase=include_phase,
+          elapsed_s=(step // decimation) * policy_dt,
+          gait_params=gait_params,
         )
         if not history:
           for _ in range(history_length):

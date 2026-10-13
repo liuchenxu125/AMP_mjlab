@@ -205,15 +205,15 @@ def _apply_casbot02_loco_rewards(cfg: ManagerBasedRlEnvCfg) -> None:
     weight=-0.1,
     params={"sensor_name": "self_collision", "force_threshold": 10.0},
   )
-  rewards["air_time"] = RewardTermCfg(
-    func=amp_mdp.command_conditioned_feet_air_time,
-    weight=0.75,
-    params={
-      "sensor_name": "feet_ground_contact",
-      "command_name": "twist",
-      "command_threshold": 0.2,
-    },
-  )
+  # rewards["air_time"] = RewardTermCfg(
+  #   func=amp_mdp.command_conditioned_feet_air_time,
+  #   weight=0.75,
+  #   params={
+  #     "sensor_name": "feet_ground_contact",
+  #     "command_name": "twist",
+  #     "command_threshold": 0.2,
+  #   },
+  # )
   rewards["standing_feet_slip"] = RewardTermCfg(
     func=amp_mdp.standing_feet_slip,
     weight=-2.0,

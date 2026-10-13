@@ -8,6 +8,13 @@ from mjlab.entity import Entity
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import BuiltinSensor, ContactSensor
+from src.tasks.amp_loco.gait import (
+  GAIT_OFFSET,
+  GAIT_PERIOD,
+  GAIT_STANCE_RATIO,
+  GAIT_STANDING_THRESHOLD,
+)
+from .observations import loco_leg_phase
 from mjlab.utils.lab_api.math import (
   quat_apply_inverse,
   yaw_quat,
@@ -22,6 +29,37 @@ if TYPE_CHECKING:
 
 
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
+
+
+def gait_phase_contact(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  command_name: str = "twist",
+  gait_period: float = GAIT_PERIOD,
+  gait_offset: float = GAIT_OFFSET,
+  stance_ratio: float = GAIT_STANCE_RATIO,
+  standing_threshold: float = GAIT_STANDING_THRESHOLD,
+  contact_force_threshold: float = 1.0,
+) -> torch.Tensor:
+  """Reward each foot matching its clock's stance/swing state (range 0..2)."""
+  if not 0 < stance_ratio <= 1:
+    raise ValueError("stance_ratio must be in (0, 1]")
+  if contact_force_threshold < 0:
+    raise ValueError("contact_force_threshold must be nonnegative")
+  sensor: ContactSensor = env.scene[sensor_name]
+  force = sensor.data.force
+  if force is None:
+    raise ValueError("gait_phase_contact requires a contact sensor with force data")
+  magnitude = torch.linalg.vector_norm(force, dim=-1)
+  if magnitude.ndim == 3 and magnitude.shape[-1] == 1:
+    magnitude = magnitude.squeeze(-1)
+  if magnitude.shape != (env.num_envs, 2):
+    raise ValueError("gait_phase_contact requires two force slots ordered left, right")
+  contact = magnitude > contact_force_threshold
+  expected_stance = loco_leg_phase(
+    env, command_name, gait_period, gait_offset, standing_threshold
+  ) < stance_ratio
+  return (contact == expected_stance).float().sum(dim=-1)
 
 
 class joint_action_rate_l2:
